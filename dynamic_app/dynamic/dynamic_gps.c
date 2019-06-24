@@ -510,6 +510,7 @@ void dynamic_gps_aid_task(void*str)
             
             case ENUM_GPS_EPO_AIDING:
             {
+#if 0
                 kal_bool aid_res;
 
                 if (dynamic_epo_is_valid())
@@ -538,6 +539,7 @@ void dynamic_gps_aid_task(void*str)
                         return;
                     }
                 }
+#endif
             }
             break;
 
@@ -561,7 +563,7 @@ void dynamic_gps_pow_ctrl(kal_uint8 onoff)
 {
     static kal_uint8 cur_state = 0xff;
 
-    //if (cur_state == onoff)
+    if (cur_state == onoff)
     {
         return;
     }

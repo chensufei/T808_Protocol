@@ -10,6 +10,27 @@
 #define dynamic_error(...) dynamic_print(DYNAMIC_LOG_ERROR, __VA_ARGS__)
 
 
+/* 32位大端转换 */
+#define M_BIG_ENDIAN_U32(x, y)		do\
+									{\
+									 y = ((x >> 24) & 0xff);\
+									 y |= (((x >> 16) & 0xff) << 8);\
+									 y |= (((x >> 8) & 0xff) << 16);\
+									 y |= ((x & 0xff) << 24);\
+									} while(0)
+/* 16位大端转换 */
+#define M_BIG_ENDIAN_U16(x, y)		do\
+									{\
+									 y = ((x >> 8) & 0xff);\
+									 y |= ((x & 0xff) << 8);\
+									} while(0)
+
+
+#define M_SET_BIT(x, b)			(x |= ((unsigned long)1 << b))
+#define M_CLR_BIT(x, b)			(x &= (~((unsigned long)1 << b)))
+#define M_GET_BIT(x, b)			(((unsigned long)x >> b) & 0x01)
+
+
 typedef unsigned int 		uint32;
 typedef unsigned short 		uint16;
 typedef unsigned char 		uint8;

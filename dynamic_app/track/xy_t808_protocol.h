@@ -27,11 +27,11 @@ typedef enum
 {
 	/* 终端上传 */
 	T808_MSGID_C_GENERAL_ACK = 0x0001,		/* 终端通用应答 */
-	T808_MSGID_C_HEART = 0x0002,				/* 心跳 */
+	T808_MSGID_C_HEART = 0x0002,			/* 心跳 */
 	T808_MSGID_C_DREG = 0x0003,			    /* 注销 */
 	T808_MSGID_C_REG = 0x0100,				/* 注册 */
 	T808_MSGID_C_AUTHEN = 0x0102,			/* 鉴权 */
-	T808_MSGID_C_PARAM_ACK = 0x0104,			/* 参数汇报 */
+	T808_MSGID_C_PARAM_ACK = 0x0104,		/* 参数汇报 */
 	T808_MSGID_C_ATTR_ACK = 0x0107,			/* 属性应答 */
 	T808_MSGID_C_POSITION = 0x0200,			/* 位置 */
 	T808_MSGID_C_POSITION_ACK = 0x0201,		/* 位置查询应答 */
@@ -41,49 +41,20 @@ typedef enum
 
 	/* 平台下发 */
 	T808_MSGID_S_GENERAL_ACK = 0x8001,		/* 平台的通用应答 */
-	T808_MSGID_S_REG_ACK = 0x8100,		/* 注册应答 */
-	T808_MSGID_S_SET_PARAM = 0x8103,			/* 平台设置参数 */
+	T808_MSGID_S_REG_ACK = 0x8100,			/* 注册应答 */
+	T808_MSGID_S_SET_PARAM = 0x8103,		/* 平台设置参数 */
 	T808_MSGID_S_QUERY_PARAM = 0x8104,		/* 平台查询参数 */
 	T808_MSGID_S_CTRL_CMD = 0x8105,			/* 平台控制指令 */
 	T808_MSGID_S_QUERY_SPE_PARAM = 0x8106,	/* 查询指定参数 */
 	T808_MSGID_S_QUERY_ATTR = 0x8107,		/* 查询终端属性 */
-	T808_MSGID_S_CTRL_VEH = 0x8500,			/* 下发控制车辆 */
 	T808_MSGID_S_QUERY_POSITION = 0x8201,	/* 平台点名操作 */
-	T808_MSGID_S_ALARM_ACK = 0x8203,			/* 确认某个报警 */
-	T808_MSGID_S_SEND_TEXT = 0x8300,			/* 文本信息下发 */
+	T808_MSGID_S_TEMP_POS_TRACKING = 0x8202,/* 临时位置跟踪控制 */
+	T808_MSGID_S_ALARM_ACK = 0x8203,		/* 确认某个报警 */
+	T808_MSGID_S_SEND_TEXT = 0x8300,		/* 文本信息下发 */
+	T808_MSGID_S_CAR_CTRL = 0x8500,			/* 车辆控制 */
 	T808_MSGID_S_EXPEND = 0x8900			/* 透传信息 */
 } T808_PROTOCOL_MSGID_E;
 
-
-
-/*******************************************************************
-** 函数名:     xy_soc_login_state
-** 函数描述:
-** 参数:       
-** 返回:       
-********************************************************************/
-kal_uint8 xy_soc_login_state(void);
-/*******************************************************************
-** 函数名:     xy_soc_login_set_state
-** 函数描述:
-** 参数:       
-** 返回:       
-********************************************************************/
-void xy_soc_login_set_state(kal_uint8 sign);
-/*******************************************************************
-** 函数名:     xy_soc_login_wait_ask
-** 函数描述:
-** 参数:       
-** 返回:       
-********************************************************************/
-kal_uint8 xy_soc_login_wait_ask(void);
-/*******************************************************************
-** 函数名:     xy_soc_login_set_wait_ask
-** 函数描述:
-** 参数:       
-** 返回:       
-********************************************************************/
-void xy_soc_login_set_wait_ask(kal_uint8 sign);
 /*******************************************************************
 ** 函数名:     xy_soc_data_pack
 ** 函数描述:   上报数据组包

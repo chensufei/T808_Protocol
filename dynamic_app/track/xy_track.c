@@ -43,7 +43,7 @@ void xy_track_dataup_task(void*ptr)
             if ((systime_sec - xy_info->slp_sectime) > (24*60*60))
             {
                 xy_info->slp_sectime = systime_sec;				
-                //xy_soc_location_up(); // 模式324小时上传一条数据
+                //xy_soc_location_up(); // 模式3 24小时上传一条数据
             }
         }
     }

@@ -22,7 +22,7 @@
 
 #define XY_ACC_CHECK_PORT 13 // 0acc使能
 #define XY_BREAK_CHECK_PORT 14 // 0剪线
-#define XY_WATCHDOG_PORT 29
+#define XY_WATCHDOG_PORT 15
 #define XY_REALY_CRL_PORT 30 // 1断油路
 
 #define XY_GSM_LED_PORT 40

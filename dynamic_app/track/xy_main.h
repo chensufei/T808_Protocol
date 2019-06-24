@@ -36,8 +36,8 @@
 
 #define XY_DEFAULT_CRL_PSW "123456"
 
-#define XY_DEFAULT_MODE1_FREQ 10 // 模式1上报间隔 单位s
-#define XY_DEFAULT_MODE2_FREQ 120 // 模式2上报间隔
+#define XY_DEFAULT_MODE1_FREQ 30 // 模式1上报间隔 单位s
+#define XY_DEFAULT_MODE2_FREQ 30 // 模式2上报间隔
 #define XY_DEFAULT_SLEEP_DELAY_TIME 180 // 休眠唤醒时间 默认180秒
 #define XY_DEFAULT_MOVE 200 // 位移报警半径，默认200m
 #define XY_DEFAULT_SPEED 60 // 超速报警阈值 默认60km/h
@@ -87,15 +87,44 @@ typedef struct _alm_mode_
 /* 终端注册 */
 typedef struct _t808_para_
 {
-    kal_uint8 is_regster; // 是否注册
     kal_uint16 provice_id;							/* 省域ID */
     kal_uint16 city_id;								/* 市域ID*/
     kal_uint8 product_id[T808_PRODUCT_ID_LEN+1];	/* 终端制造商编码 */
-    kal_uint8 dev_model[T808_DEV_TYPE_LEN+1];	/* 终端型号,20 个字节，此终端型号由制造商自行定义，位数不足时，后补“0X00” */
+    kal_uint8 dev_model[T808_DEV_TYPE_LEN+1];		/* 终端型号,20 个字节，此终端型号由制造商自行定义，位数不足时，后补“0X00” */
     kal_uint8 dev_id[T808_DEV_ID_LEN+1];			/* 7 个字节，由大写字母和数字组成，此终端 ID 由制造商自行定义，位数不足时，后补“0X00” */
     kal_uint8 veh_color;							/* 车牌颜色 默认0*/
     kal_uint8 veh_id[T808_VEH_ID_LEN+1];			/* 车牌默认0*/
-    kal_uint8 auth_code[T808_AUTH_CODE_LEN+1];		    /* 鉴权码信息 */
+    kal_uint8 auth_code[T808_AUTH_CODE_LEN+1];		/* 鉴权码信息 */
+	kal_uint8 auth_code_len;						/* 鉴权码长度 */
+
+	kal_uint16 tcp_ack_overtime;					/* TCP超时时候 */
+	kal_uint16 tcp_resend_cnt;						/* tcp重传次数 */
+	kal_uint8 report_type;							/* 位置汇报策略,位置信息上报方式，0：定时汇报；1：定距汇报；2：定时和定距汇报 */
+	kal_uint8 report_way;							/* 位置汇报方案, 0：根据 ACC 状态； 1：根据登录状态和 ACC 状态，先判断登录状态，若登录再根据 ACC 状态 */
+
+	kal_uint32 sos_freq;							/* 紧急报警时间，默认是5s */
+	kal_uint32 def_distance;						/* 缺省距离汇报间隔,默认是30m */
+	kal_uint32 sos_distance;						/* 缺省距离汇报间隔,默认是10m */
+	kal_uint16 degree;								/* 拐点补传角度, <180° */
+	kal_uint16 fencing_radius;						/* 电子围栏半径（非法位移阈值），单位为米，默认300m */
+	char txt_number[MAX_PHONE_NUM_LEN + 1];			/* 文本号码，接收短信/报警 */
+	kal_uint32 alarm_sw;							/* 报警开关字节，对应位置信息里面的报警位，1-代表屏蔽 */
+	kal_uint32 alarm_sms_sw;						/* 报警发送文本 SMS 开关，与位置信息汇报消息中的报警标志相对应，相应位为 1 则相应报警时发送文本 SMS */
+
+	kal_uint32 over_speed;							/* 最高速度，单位为公里每小时(km/h)默认120km/h */
+	kal_uint32 speed_keep_time;						/* 超速持续时间，单位为秒（s）默认10s */
+
+	kal_uint32 over_speed_pre_val;					/* 超速持续时间，单位为秒（s），默认110km/h */
+
+	kal_uint16 hit_param_val;						/* 碰撞报警参数设置：
+	  													b7-b0： 碰撞时间，单位 4ms；
+	  													b15-b8：碰撞加速度，单位 0.1g，设置范围在：0-79 之间，默认为
+	  													10。 */
+	kal_uint16 roll_over_param_val;					/* 侧翻报警参数设置：
+													   侧翻角度，单位 1 度，默认为 30 度。 */
+
+	kal_uint8 gpsMode;							   /* GPS定位模式，0 - 不支持GPS定位，1-支持GPS定位 */
+	kal_uint8 bdMode;							   /* bd定位模式，0 - 不支持GPS定位，1-支持GPS定位 */
 }T808_PARA_T;
 
 typedef struct _xy_info_

@@ -265,13 +265,13 @@ void dynamic_sensor_task(void*str)
     else
     {
         err_cnt++;
-        dynamic_debug("GSENSOR数据读取错误");
+        //dynamic_error("GSENSOR数据读取错误");
     }
 
     if (x == x_buf && y == y_buf && z == z_buf)
     {
         err_cnt++;
-        dynamic_debug("GSENSOR数据读取不变");
+        //dynamic_error("GSENSOR数据读取不变");
     }
     x_buf = x;
     y_buf = y;

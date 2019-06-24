@@ -97,13 +97,11 @@ void dynamic_cmd_ask(char type,char*num,char* askdata,kal_uint16 asklen)
 
 	    case DYNAMIC_CMD_TYPE_SMS:
             dynamic_sms_list_add(num,asklen,askdata);
-            dynamic_timer_start(enum_timer_sms_reset_timer,30*1000, (void *)dynamic_reset_delay,0,0);
 	    break;
 
         case DYNAMIC_CMD_TYPE_UART:
 	    default:
             dynamic_cmd_uart_write(askdata,asklen);
-            dynamic_start_reset(RESET_TYPE_FOR_CMD);
 	    break;
 	}
 }
@@ -333,6 +331,7 @@ int dynamic_cmd_sr(char type,char*num,char *cmd,dynamic_custom_cmdLine *str)
     int ret = DYNAMIC_AT_ERROR;
     custom_cmd_mode_enum result;
     kal_int16 asklen = 0;
+	XY_INFO_T * xy_info = xy_get_info();
     char *askdata = dynamic_malloc_malloc(DYNAMIC_CMD_ASK_LEN);
 
     if (askdata == NULL)
@@ -364,7 +363,8 @@ int dynamic_cmd_sr(char type,char*num,char *cmd,dynamic_custom_cmdLine *str)
             asklen += sprintf(&askdata[asklen],"ver:%s\r\n",DYNAMIC_SOFT_VER);
     	    asklen += sprintf(&askdata[asklen],"build date time:%s\r\n",dynamic_time_get_build_date_time());
     	    asklen += sprintf(&askdata[asklen],"space total:%lld,%lld\r\n",dynamic_fs_get_total_space(),dynamic_fs_get_free_space());
-            asklen += sprintf(&askdata[asklen],"plmn:%s\r\n",app_cntx->sim_plmn);
+			asklen += sprintf(&askdata[asklen],"Server:%s,%d\r\n", xy_info->server, xy_info->port);
+			asklen += sprintf(&askdata[asklen],"plmn:%s\r\n",app_cntx->sim_plmn);
             asklen += sprintf(&askdata[asklen],"imei:%s\r\n",app_cntx->imei);
             asklen += sprintf(&askdata[asklen],"csq:%d\r\n",app_cntx->csq);
             asklen += sprintf(&askdata[asklen],"ref_reset_type:%d\r\n",sys_info->ref_reset_type);
@@ -522,6 +522,135 @@ int dynamic_cmd_format(char type,char*num,char *cmd,dynamic_custom_cmdLine *str)
 }
 
 /*******************************************************************
+** 函数名:	   dynamic_cmd_ip
+** 函数描述:   ip? / ip=xxx.xxx.xxx.xxx,port
+** 参数:	   
+** 返回:	   
+********************************************************************/
+int dynamic_cmd_ip(char type,char*num,char *cmd,dynamic_custom_cmdLine *str)
+{
+	int ret = DYNAMIC_AT_ERROR;
+	custom_cmd_mode_enum result;
+	kal_int16 asklen = 0;
+	char *askdata = dynamic_malloc_malloc(DYNAMIC_CMD_ASK_LEN);
+	XY_INFO_T * xy_info = xy_get_info();
+
+	if (askdata == NULL)
+	{
+		return ret;
+	}
+	memset(askdata,0,DYNAMIC_CMD_ASK_LEN);
+	
+	result = dynamic_cmd_find_cmd_mode(str);	
+	switch (result)
+	{
+		case CUSTOM_SET_OR_EXECUTE_MODE:
+		{
+			char ip[32] = {0};
+			char strport[8] = {0};
+			u16 port = 0;
+
+			
+			if (2 == sscanf(&str->character[str->position],"%[^,],%s", ip, strport))
+		    {
+		    	port = (u16)atoi(strport);
+		    	if ((strlen(ip) > 0) && (port > 0))
+		    	{
+					memset(xy_info->server, 0, sizeof(xy_info->server));
+					memcpy((void *)xy_info->server, (void *)ip, strlen(ip));
+					xy_info->port = port;
+
+					asklen += sprintf(&askdata[asklen],"Set Server Info Ok\r\n");
+		            dynamic_cmd_ask(type,num,askdata,asklen);
+
+					xy_soc_clear_link_info();
+
+					ret = DYNAMIC_AT_RET;
+				}				
+		    }
+			
+		}
+		break;
+
+		case CUSTOM_READ_MODE://读参数
+		{
+			asklen += sprintf(&askdata[asklen],"Server:%s,%d\r\n", xy_info->server, xy_info->port);
+            dynamic_cmd_ask(type,num,askdata,asklen);
+			
+			ret = DYNAMIC_AT_RET;
+		}
+		break;
+
+		case CUSTOM_TEST_MODE:
+
+		break;
+
+		case CUSTOM_ACTIVE_MODE:
+		
+		break;
+
+		default:
+
+		break;
+
+	}
+	return ret;
+}
+
+/*******************************************************************
+** 函数名:     dynamic_cmd_factoy
+** 函数描述:   
+** 参数:       
+** 返回:       
+********************************************************************/
+int dynamic_cmd_factoy(char type,char*num,char *cmd,dynamic_custom_cmdLine *str)
+{
+    int ret = DYNAMIC_AT_ERROR;
+    custom_cmd_mode_enum result;
+    kal_int16 asklen = 0;
+    char *askdata = dynamic_malloc_malloc(DYNAMIC_CMD_ASK_LEN);
+
+    if (askdata == NULL)
+    {
+        return ret;
+    }
+    memset(askdata,0,DYNAMIC_CMD_ASK_LEN);
+    
+    result = dynamic_cmd_find_cmd_mode(str); 	
+    switch (result)
+    {
+        case CUSTOM_SET_OR_EXECUTE_MODE:
+
+        break;
+
+        case CUSTOM_READ_MODE:
+
+        break;
+
+        case CUSTOM_TEST_MODE:
+
+        break;
+
+        case CUSTOM_ACTIVE_MODE:
+        {
+			xy_info_reset();
+
+            asklen += sprintf(&askdata[asklen],"Restore Factory Settings Ok\r\n");
+            
+            dynamic_cmd_ask(type,num,askdata,asklen);
+            ret = DYNAMIC_AT_RET;	
+        }
+        break;
+
+        default:
+
+        break;
+
+    }
+    return ret;
+}
+
+/*******************************************************************
 ** 函数名:     dynamic_cmd_parse
 ** 函数描述:   
 ** 参数:       
@@ -618,7 +747,7 @@ int dynamic_cmd_parse(DYNAMIC_CMD_TYPE_E type,char *num,char* str,kal_uint32 len
 ********************************************************************/
 int dynamic_cmd_uart_callback(unsigned char *str,int len)
 {
-	return dynamic_cmd_parse(DYNAMIC_CMD_TYPE_SMS,NULL,(char*)str,len);
+	return dynamic_cmd_parse(DYNAMIC_CMD_TYPE_UART,NULL,(char*)str,len);
 }
 
 /*******************************************************************
@@ -631,14 +760,16 @@ void dynamic_cmd_init(void)
 {
     DYNAMIC_CMD_T * cmd_table = s_dynamic_cmd_table;
 
-    cmd_table[s_cmd_num].sstr = "RESET"; cmd_table[s_cmd_num++].entryproc = dynamic_cmd_reset;
-    cmd_table[s_cmd_num].sstr = "DEBUG"; cmd_table[s_cmd_num++].entryproc = dynamic_cmd_debug;    
-    cmd_table[s_cmd_num].sstr = "ATD"; cmd_table[s_cmd_num++].entryproc = dynamic_cmd_atd; 
-    cmd_table[s_cmd_num].sstr = "GPSLOG"; cmd_table[s_cmd_num++].entryproc = dynamic_cmd_gpslog; 
-    cmd_table[s_cmd_num].sstr = "SR"; cmd_table[s_cmd_num++].entryproc = dynamic_cmd_sr; 
-    cmd_table[s_cmd_num].sstr = "RESETINFO"; cmd_table[s_cmd_num++].entryproc = dynamic_cmd_resetinfo;
-    cmd_table[s_cmd_num].sstr = "FORMAT"; cmd_table[s_cmd_num++].entryproc = dynamic_cmd_format;
-
+    cmd_table[s_cmd_num].sstr = "RESET"; 		cmd_table[s_cmd_num++].entryproc = dynamic_cmd_reset;
+    cmd_table[s_cmd_num].sstr = "DEBUG"; 		cmd_table[s_cmd_num++].entryproc = dynamic_cmd_debug;    
+    cmd_table[s_cmd_num].sstr = "ATD"; 			cmd_table[s_cmd_num++].entryproc = dynamic_cmd_atd; 
+    cmd_table[s_cmd_num].sstr = "GPSLOG"; 		cmd_table[s_cmd_num++].entryproc = dynamic_cmd_gpslog; 
+    cmd_table[s_cmd_num].sstr = "SR"; 			cmd_table[s_cmd_num++].entryproc = dynamic_cmd_sr; 
+    cmd_table[s_cmd_num].sstr = "RESETINFO"; 	cmd_table[s_cmd_num++].entryproc = dynamic_cmd_resetinfo;
+    cmd_table[s_cmd_num].sstr = "FORMAT"; 		cmd_table[s_cmd_num++].entryproc = dynamic_cmd_format;
+	cmd_table[s_cmd_num].sstr = "IP"; 			cmd_table[s_cmd_num++].entryproc = dynamic_cmd_ip;
+	cmd_table[s_cmd_num].sstr = "FACTORY"; 		cmd_table[s_cmd_num++].entryproc = dynamic_cmd_factoy;
+	
 #ifdef __XY_SUPPORT__
 
     cmd_table[s_cmd_num].sstr = "GPSSNR"; cmd_table[s_cmd_num++].entryproc = xy_cmd_gpssnr;

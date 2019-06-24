@@ -35,7 +35,6 @@ typedef struct {
 typedef struct 
 {
     kal_int8 soc_id;
-    
 }XY_CONTEXT_T;
 
 
@@ -49,10 +48,109 @@ static kal_uint8 s_soc_nodata = 0;
 static kal_uint8 s_noask_cnt = 0;
 static kal_uint8 s_heart_no_ask = 0;
 
+
+typedef struct _xy_soc_info_st
+{
+	u8 soc_connect_ok;						//socket连接平台成功标志
+	u8 reg_ok;								//注册成功标志
+	u8 auth_ok;								//登录鉴权成功标志
+	u8 auth_fail_cnt;						//发送成功，平台应答失败的次数
+	u8 send_cnt;							//报文发送成功却未应答的次数
+	u8 ack_fail_cnt;						//应答失败次数
+	u8 send_fail_cnt;						//发送失败的次数
+	u8 close_soc_cnt;						//在连接平台到发送鉴权过程中，关闭soc的次数
+} xy_soc_info_st;
+
 void xy_soc_task(void*ptr);
 void xy_soc_heart_wait_ask(void*str);
 void xy_soc_heart_reset(void);
+kal_uint8 xy_soc_close(void);
 
+/*******************************************************************
+** 全部变量定义 
+********************************************************************/
+/* socket任务相关信息 */
+static xy_soc_info_st s_xy_soc_info;
+
+
+/*******************************************************************
+** 函数: void xy_soc_set_ack_fail_cnt(kal_uint8 value)
+** 描述: 设置响应失败的次数
+** 参数:       
+** 返回:       
+********************************************************************/
+void xy_soc_set_ack_fail_cnt(kal_uint8 value)
+{
+    s_xy_soc_info.ack_fail_cnt = value;
+}
+
+/*******************************************************************
+** 函数: kal_uint8 xy_soc_get_ack_fail_cnt(void)
+** 描述: 获取响应失败的次数
+** 参数:       
+** 返回:       
+********************************************************************/
+kal_uint8 xy_soc_get_ack_fail_cnt(void)
+{
+    return s_xy_soc_info.ack_fail_cnt;
+}
+
+
+/*******************************************************************
+** 函数: xy_soc_get_reg_ok_state
+** 描述: 获取注册成功状态
+** 参数:       
+** 返回:       
+********************************************************************/
+kal_uint8 xy_soc_get_reg_ok_state(void)
+{
+    return s_xy_soc_info.reg_ok;
+}
+
+/*******************************************************************
+** 函数: xy_soc_get_connect_ok_state
+** 描述: 获取socket连接成功状态
+** 参数:       
+** 返回:       
+********************************************************************/
+kal_uint8 xy_soc_get_connect_ok_state(void)
+{
+    return s_xy_soc_info.soc_connect_ok;
+}
+
+/*******************************************************************
+** 函数: xy_soc_get_auth_ok_state
+** 描述: 获取鉴权成功状态
+** 参数:       
+** 返回:       
+********************************************************************/
+kal_uint8 xy_soc_get_auth_ok_state(void)
+{
+    return s_xy_soc_info.auth_ok;
+}
+
+/*******************************************************************
+** 函数: xy_soc_clear_link_info
+** 描述: 清除链路信息
+** 参数:       
+** 返回:       
+********************************************************************/
+void xy_soc_clear_link_info(void)
+{
+	if (s_soc_cont.soc_id >= 0)
+	{
+		xy_soc_close();
+	}
+	
+	s_xy_soc_info.ack_fail_cnt = 0;
+	s_xy_soc_info.send_fail_cnt = 0;
+	s_xy_soc_info.send_cnt = 0;
+	s_xy_soc_info.auth_fail_cnt = 0;
+	
+	s_xy_soc_info.reg_ok = 0;
+	s_xy_soc_info.auth_ok = 0;
+	s_xy_soc_info.soc_connect_ok = 0;
+}
 
 /*******************************************************************
 ** 函数名:     xy_assemble_by_rules
@@ -149,8 +247,13 @@ kal_int8 xy_soc_get_socid(void)
 ********************************************************************/
 kal_uint8 xy_soc_close(void)
 {
+
     dynamic_debug("user xy_soc_close");
-    return dynamic_soc_close(s_soc_cont.soc_id);
+
+	dynamic_soc_close(s_soc_cont.soc_id);
+	s_soc_cont.soc_id = -1;
+
+	return 0;
 }
 
 /*******************************************************************
@@ -255,7 +358,6 @@ kal_bool xy_soc_data_in(kal_uint8 *data,kal_uint16 len)
     if (data_str == 0)
     {
         dynamic_error("xy_soc_data_in data_str == NULL");
-        dynamic_start_reset(RESET_TYPE_MEM_ERR);
         return KAL_FALSE;
     }
 
@@ -454,32 +556,33 @@ void xy_soc_cb(DYNAMIC_SOC_CB_E type,kal_int8 socket,void *user_data, void *data
     {
         case DYNAMIC_SOC_HOST_OK: // 解析域名成功
             dynamic_debug("xy_soc_cb DYNAMIC_SOC_HOST_OK");
-        
         break;
         
         case DYNAMIC_SOC_HOST_FAILED: // 解析域名失败
             dynamic_debug("xy_soc_cb DYNAMIC_SOC_HOST_FAILED");
             s_soc_cont.soc_id = -1;
+			s_xy_soc_info.soc_connect_ok = 0;
         break;
         
         case DYNAMIC_SOC_CONNECT_OK: // 连接成功
             dynamic_debug("xy_soc_cb DYNAMIC_SOC_CONNECT_OK");
-
-            xy_soc_login_set_state(0);
+			s_xy_soc_info.soc_connect_ok = 1;
+			s_xy_soc_info.reg_ok = 0;
+			s_xy_soc_info.auth_ok = 0;
             dynamic_timer_start(enum_timer_soc_task_timer,5000,(void*)xy_soc_task,NULL,FALSE);
         break;
         
         case DYNAMIC_SOC_CONNECT_FAILED: // 连接失败
             dynamic_debug("xy_soc_cb DYNAMIC_SOC_CONNECT_FAILED");
             s_soc_cont.soc_id = -1;
+			s_xy_soc_info.soc_connect_ok = 0;
         break;
         
         case DYNAMIC_SOC_CLOSE: // 连接被关闭
         {
             dynamic_debug("xy_soc_cb DYNAMIC_SOC_CLOSE");
             s_soc_cont.soc_id = -1;
-            xy_soc_login_set_state(0);
-            
+			s_xy_soc_info.soc_connect_ok = 0;
         }    
         break;
         
@@ -526,7 +629,7 @@ void xy_soc_heart_task(void*str)
         heart_time = xy_info->heart_time;
     }
 
-    if (xy_soc_login_state() == 1 && xy_info->heart_time != 0)
+    if ((1 == s_xy_soc_info.auth_ok) && (xy_info->heart_time != 0))
     {
         dynamic_debug("xy_soc_heart_task");
         if (xy_soc_heart_up() == 1)
@@ -592,10 +695,14 @@ void xy_soc_heart_wait_ask(void*str)
 void xy_soc_task(void*ptr)
 {
     kal_uint32 tasktime = 5*1000;
-    static kal_uint16 err_cnt = 0; // 连续多次判断socket连接未成功，关闭SOCKET
+#if 1
+	static u8 gsm_net_fail_cnt = 0;
+#else
+	static kal_uint16 err_cnt = 0; // 连续多次判断socket连接未成功，关闭SOCKET
     static kal_uint16 err_reset = 0; // 连续多次异常，重启设备
     static kal_uint16 err_gsm_state = 0;
     static kal_uint8 send_false = 0;
+#endif
     XY_INFO_T * xy_info = xy_get_info();
     APP_CNTX_T * app_cntx = dynamic_app_cntx_get();
     DYNAMIC_SOC_CONNECTION_T *p_connection = dynamic_soc_find_connection(s_soc_cont.soc_id);
@@ -607,7 +714,217 @@ void xy_soc_task(void*ptr)
         dynamic_timer_start(enum_timer_soc_task_timer,tasktime,(void*)xy_soc_task,NULL,FALSE);
         return;
     }
-    
+
+#if 1
+	if (p_connection && (DYNAMIC_SOC_CONNECTED == p_connection->status))
+	{
+		/* 已连接上平台 */
+		if (1 == s_xy_soc_info.soc_connect_ok)
+		{
+			/* =======鉴权通过 */
+			if (1 == s_xy_soc_info.auth_ok)
+			{
+				/* 位置包的发送 */
+				tasktime = 5*1000;
+
+				//dynamic_soc_send_task();
+
+				goto cycle;
+			}
+
+			/* 一直未应答或发送失败 */
+			if ((s_xy_soc_info.send_cnt > 3) || (s_xy_soc_info.send_fail_cnt > 3))
+			{
+				/* 2种情况去关闭socket重新连接：
+				1.发送成功三次，但是一直未应答的情况.
+				2.连续三次发送失败
+				*/
+				dynamic_debug("send data cnt[%d], send fail cnt[%d] close socket[%d]\r\n",
+				s_xy_soc_info.send_cnt, s_xy_soc_info.send_fail_cnt, s_soc_cont.soc_id);
+
+				/* 需要重新进行连接设备 */
+				s_xy_soc_info.ack_fail_cnt = 0;
+				s_xy_soc_info.send_fail_cnt = 0;
+				s_xy_soc_info.send_cnt = 0;
+				s_xy_soc_info.auth_fail_cnt = 0;
+				
+				s_xy_soc_info.reg_ok = 0;
+				s_xy_soc_info.auth_ok = 0;
+				s_xy_soc_info.soc_connect_ok = 0;
+				
+				s_xy_soc_info.close_soc_cnt++;
+				dynamic_soc_close(s_soc_cont.soc_id);
+
+				/* 10s后重连 */
+				tasktime = 10 * 1000;
+				goto cycle;
+			}
+		
+			/* ========注册成功, 鉴权失败 */
+			if (1 == s_xy_soc_info.reg_ok)
+			{
+				if (s_xy_soc_info.ack_fail_cnt >= 3)
+				{
+					/* 连续应答鉴权失败三次，上传的鉴权信息问题导致，重新发送注册信息，获取鉴权信息 */
+					s_xy_soc_info.reg_ok = 0;
+					s_xy_soc_info.ack_fail_cnt = 0;
+					s_xy_soc_info.send_fail_cnt = 0;
+					s_xy_soc_info.send_cnt = 0;
+
+					dynamic_debug("ack auth fail cnt[%d]\r\n", s_xy_soc_info.auth_fail_cnt + 1);
+					if (++s_xy_soc_info.auth_fail_cnt >= 3)
+					{
+						s_xy_soc_info.auth_fail_cnt = 0;
+						s_xy_soc_info.soc_connect_ok = 0;
+						s_xy_soc_info.close_soc_cnt++;
+						dynamic_soc_close(s_soc_cont.soc_id);
+
+						/* 10s后重连 */
+						tasktime = 10 * 1000;
+					}
+					else
+					{
+						/* 5s后重发送注册信息 */
+						tasktime = 5 * 1000;
+					}
+					goto cycle;
+				}
+
+				if (KAL_TRUE == xy_soc_login_up())
+				{
+					s_xy_soc_info.send_cnt++;
+					s_xy_soc_info.send_fail_cnt = 0;
+
+					/* 等待45s后，判断是否鉴权通过 */
+					tasktime = XY_WAIT_ASK_TIME * 1000;
+				}
+				else
+				{
+					s_xy_soc_info.send_fail_cnt++;
+
+					/* 5s后重发 */
+					tasktime = 5 * 1000;
+				}
+
+				goto cycle;
+			}
+
+			/* =========还未注册成功 */
+			/* 发送成功注册报文，连续三次应答失败，注册信息不对，导致平台应答失败，重启一次 */
+			if (s_xy_soc_info.ack_fail_cnt >= 3)
+			{
+				s_xy_soc_info.ack_fail_cnt = 0;
+				s_xy_soc_info.send_fail_cnt = 0;
+				s_xy_soc_info.send_cnt = 0;
+
+				dynamic_debug("send reg data succ, ack fail 3 times, close socket[%d]\r\n",
+								s_soc_cont.soc_id);
+
+				s_xy_soc_info.reg_ok = 0;
+				s_xy_soc_info.soc_connect_ok = 0;
+				s_xy_soc_info.close_soc_cnt++;
+				dynamic_soc_close(s_soc_cont.soc_id);
+
+				/* 10s后重连 */
+				tasktime = 10 * 1000;
+				goto cycle;
+			}
+
+			/* 发送注册报文 */
+			if (KAL_TRUE == xy_soc_regster_up())
+            {
+                tasktime = XY_WAIT_ASK_TIME*1000; // 发送成功，等待应答,45s
+                s_xy_soc_info.send_cnt++;
+				s_xy_soc_info.send_fail_cnt = 0;
+            }
+            else
+            {
+                s_xy_soc_info.send_fail_cnt++;
+
+				/* 5s之后，重新进行发送 */
+				tasktime = 5*1000;
+            }
+			goto cycle;
+		}
+
+		/* 但是connect OK 标志有误,等待10s后去重连平台 */
+		if (s_soc_cont.soc_id >= 0)
+		{
+			s_xy_soc_info.close_soc_cnt++;
+			p_connection->status = DYNAMIC_SOC_CLOSING;
+			dynamic_soc_close(s_soc_cont.soc_id);
+		}
+		tasktime = 10 *1000;
+		goto cycle;
+	}
+
+	/* 开始连接平台 */
+	if (!p_connection)
+	{
+		s_xy_soc_info.close_soc_cnt = 0;
+
+		if (1 == app_cntx->gsm_state)//搜索到网络了
+        {
+			kal_uint8 server[XY_URL_LEN + 1] = {0};
+            kal_uint16 port = 0;
+
+			gsm_net_fail_cnt = 0;
+            memset(server,0,sizeof(server));
+            if (strlen((char*)xy_info->server) > 7 && xy_info->port > 0)
+            {
+                memcpy(server, xy_info->server, strlen((char*)xy_info->server));
+                port = xy_info->port;
+            }
+            else
+            {
+                dynamic_log("err server:%s,port:%d\r\n",xy_info->server,xy_info->port);
+                memcpy(server,XY_DEFAULT_SERVER,strlen((char*)XY_DEFAULT_SERVER));
+                port = XY_DEFAULT_PORT;
+            }
+
+			/* 用TCP的方式去连接平台 */
+			dynamic_log("connect server: %s, %d\r\n", server, port);
+			s_soc_cont.soc_id = dynamic_soc_connect(0, (kal_int8*)server, port,(void*)xy_soc_cb, NULL);
+
+			tasktime = 15*1000;
+            goto cycle;
+		}
+
+		/* 未注册上网络，100s未检测搜索都网络，就重启 */
+		if (++gsm_net_fail_cnt >= 20)
+		{
+			gsm_net_fail_cnt = 0;
+			dynamic_log("soc err err_gsm_state,start reset\r\n");
+	        if (dynamic_sim_get_valid() == 0)
+	        {
+	            if (xy_info->reset_cnt < 3)
+	            {
+	                xy_info->reset_cnt++;
+	                dynamic_start_reset(RESET_TYPE_NO_SIM);
+	            }
+	            dynamic_log("xy_info->reset_cnt:%d\r\n", xy_info->reset_cnt);
+	        }
+	        else
+	        {
+	            xy_info->reset_cnt = 0;
+	            dynamic_start_reset(RESET_TYPE_SOC_ERR);
+	        }
+
+			tasktime = 5*1000;
+		}
+	}
+	
+cycle:
+
+	/* 在连接平台到发送鉴权过程中，关闭soc的次数大于10次，就重启设备 */
+	if (s_xy_soc_info.close_soc_cnt >= 10)
+	{
+		dynamic_log("over 10 times, close soc ,start reset......\r\n");
+        dynamic_start_reset(RESET_TYPE_SOC_ERR);
+	}
+	
+	dynamic_timer_start(enum_timer_soc_task_timer, tasktime,(void*)xy_soc_task,NULL,FALSE);
+#else
     if (p_connection == NULL) // SOC未连接
     {
         err_cnt = 0;
@@ -671,7 +988,7 @@ void xy_soc_task(void*ptr)
                     send_false++;
                 }
             }
-            else if (xy_soc_login_state() == 0)
+            else if (xy_soc_get_auth_ok_state() == 0)
             {
                 if (xy_soc_login_wait_ask() == 1)
                 {
@@ -740,7 +1057,9 @@ void xy_soc_task(void*ptr)
         dynamic_start_reset(RESET_TYPE_SOC_ERR);
     }
 
-    dynamic_timer_start(enum_timer_soc_task_timer,tasktime,(void*)xy_soc_task,NULL,FALSE);
+    dynamic_timer_start(enum_timer_soc_task_timer, tasktime, (void*)xy_soc_task,NULL,FALSE);
+#endif
+
 }
 
 /*******************************************************************
@@ -763,7 +1082,7 @@ void xy_soc_err_check(void)
         dynamic_debug("s_soc_nodata:%d",s_soc_nodata);
     }
 #endif
-    if (++s_soc_nodata >= 15*6)
+    if (++s_soc_nodata >= 15*6) //90s没有收到平台下发数据重启
     {
         s_soc_nodata = 0;
         dynamic_start_reset(RESET_TYPE_NODATA);
@@ -825,10 +1144,6 @@ void xy_soc_data_init(void)
         }
         dynamic_free(data);
         dynamic_file_dele(XY_SOC_DATA_FILE_NAME);
-    }
-    else
-    {
-        dynamic_start_reset(RESET_TYPE_MEM_ERR);
     }
 }
 
@@ -909,14 +1224,14 @@ void xy_soc_init(void)
     memset(&s_soc_cont,0,sizeof(s_soc_cont));
     s_soc_cont.soc_id = -1;
     
-    s_soc_queue = dynamic_queue_create(XY_MAX_SOC_DATA_NUM);
+    s_soc_queue = dynamic_queue_create(XY_MAX_SOC_DATA_NUM);//缓存100条
     if (s_soc_queue == NULL)
     {
         dynamic_error("xy_soc_init queue create err");
     }
     else
     {
-        xy_soc_data_init();
+        xy_soc_data_init();//读文件，把保存到文件的盲区数据读到队列中
     }
 
     dynamic_timer_start(enum_timer_soc_task_timer,15*1000,(void*)xy_soc_task,NULL,FALSE); 

@@ -48,5 +48,9 @@
 
 #define DYNAMIC_SOFT_VER_FOR_PROTOCOL 0x0101 // 高8位硬件版本，低8位软件版本
 
+#define M_DYNAMIC_SOFTWARE_VER		"190624_V1.0"
+#define M_DYNAMIC_HARDWARE_VER		"T102_V1.0"
+
+
 #endif
 

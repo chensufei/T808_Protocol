@@ -95,7 +95,6 @@ void xy_sms_alm_assem(XY_ALM_TYPE_E type)
     if (asc_buf == NULL)
     {
         dynamic_debug("xy_sms_alm_assem malloc err");
-        dynamic_start_reset(RESET_TYPE_MEM_ERR);
         return;
     }
 

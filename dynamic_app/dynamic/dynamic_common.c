@@ -31,6 +31,7 @@ void*  dynamic_malloc_malloc (kal_uint32 size)
     if (dtr == NULL)
     {
         dynamic_error("内存申请失败:%d",size);
+        dynamic_start_reset(RESET_TYPE_MEM_ERR);
     }
 
     return dtr;
@@ -121,5 +122,24 @@ kal_uint8* dynamic_find_byte_pos(kal_uint8 *sptr,kal_uint8 data,kal_uint32 maxle
     }
     return NULL;
 }
+/**************************************************************************
+* 函  数: kal_uint8 dynamic_dec_to_bcd(kal_uint8 dec)
+* 描  述: 将10进制数换成BCD码
+* 举  例: 12 -> 0x12
+* 入  参: u8 dec：10进制数值,取值范围0 - 99
+* 出  参: void
+* 返回值: u8 : bcd码的16进制数据
+**************************************************************************/
+kal_uint8 dynamic_dec_to_bcd(kal_uint8 dec)
+{
+	if (dec > 100)
+	{
+		return 0;
+	}
+
+	return (u8)(((dec / 10) << 4) | (dec % 10));
+}
+
+
 
 

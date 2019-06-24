@@ -17,7 +17,6 @@
 
 #define GSM_LED_CYC 30 // 3S周期
 #define GPS_LED_CYC 30 // 3S周期
-extern kal_uint8 s_login;
 
 /*******************************************************************
 ** 函数名:     xy_led_task
@@ -36,7 +35,7 @@ void xy_led_task(void*str)
     APP_CNTX_T *app_cntx = dynamic_app_cntx_get();
     if (dynamic_sim_get_valid() == 1 && app_cntx->csq > 0)
     {
-        if (xy_soc_login_state() == 0)
+        if (xy_soc_get_auth_ok_state() == 0)
         {
             gsm_led = 1;
         }

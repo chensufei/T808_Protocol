@@ -15,7 +15,19 @@
 #include "dynamic_init.h"
 #ifdef __XY_SUPPORT__
 
+/*******************************************************************
+** 宏定义
+********************************************************************/
+#define M_T808_DEF_PROVICE_ID		(44)			/* 默认省域ID */
+#define M_T808_DEF_CITY_ID			(307)			/* 默认市域ID */
+#define M_T808_DEF_PRODUCT_ID		"19000"			/* 厂商ID */
+#define M_T808_DEF_TERM_TYPE		"XY_DEVICE_T808"/* 默认终端类型 */
+#define M_T808_DEF_VIN				"XY123456789012345"
 
+/*******************************************************************
+** 全局变量
+********************************************************************/
+/* 系统参数 */
 static XY_INFO_T xy_info;
 
 
@@ -126,6 +138,26 @@ void xy_apn_dns_init(void)
 }
 
 /*******************************************************************
+** 函数名:     xy_t808_param_reset
+** 函数描述:   初始化参数
+** 参数:       
+** 返回:       
+********************************************************************/
+void xy_t808_param_reset(void)
+{
+	xy_info.t808_para.provice_id = M_T808_DEF_PROVICE_ID;
+	xy_info.t808_para.city_id = M_T808_DEF_CITY_ID;
+	
+	memcpy(xy_info.t808_para.product_id, (u8 *)M_T808_DEF_PRODUCT_ID, T808_PRODUCT_ID_LEN);
+	memcpy(xy_info.t808_para.dev_model, (u8 *)M_T808_DEF_TERM_TYPE, strlen(M_T808_DEF_TERM_TYPE));
+	memcpy(xy_info.t808_para.dev_id, (u8 *)"XY_001", strlen("XY_001"));
+
+	xy_info.t808_para.veh_color = 0;
+	
+	memcpy(xy_info.t808_para.veh_id, (u8 *)M_T808_DEF_VIN, strlen(M_T808_DEF_VIN));
+}
+
+/*******************************************************************
 ** 函数名:     xy_info_reset
 ** 函数描述:   
 ** 参数:       
@@ -158,9 +190,8 @@ kal_uint8 xy_info_reset(void)
     
     memset(dev_num,0,sizeof(dev_num));
     memcpy(dev_num,xy_info.dev_num,strlen((char*)xy_info.dev_num));
-    
+	
     memset(&xy_info,0,sizeof(xy_info));
-
     memcpy(xy_info.server,server,strlen((char*)server));
     xy_info.port = port;
     
@@ -192,7 +223,9 @@ kal_uint8 xy_info_reset(void)
 	xy_info.heart_time = 180;	
     
     xy_info.vibsensity = DYNAMIC_DEFAULT_VIBSENSITY; // 震动灵敏度 越大越灵敏
-    
+
+	xy_t808_param_reset();
+	
     xy_info_save();
 
     xy_apn_dns_init();

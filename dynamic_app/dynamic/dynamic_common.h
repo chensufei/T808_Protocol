@@ -64,6 +64,15 @@ kal_uint8 dynamic_checksum_xor(kal_uint8 *Ptr,kal_int32 len);
 ** 返回:       
 ********************************************************************/
 kal_uint8* dynamic_find_byte_pos(kal_uint8 *sptr,kal_uint8 data,kal_uint32 maxlen);
+/**************************************************************************
+* 函  数: kal_uint8 dynamic_dec_to_bcd(kal_uint8 dec)
+* 描  述: 将10进制数换成BCD码
+* 举  例: 12 -> 0x12
+* 入  参: u8 dec：10进制数值,取值范围0 - 99
+* 出  参: void
+* 返回值: u8 : bcd码的16进制数据
+**************************************************************************/
+kal_uint8 dynamic_dec_to_bcd(kal_uint8 dec);
 
 
 #endif

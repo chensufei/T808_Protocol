@@ -244,7 +244,7 @@ void dynamic_reset_init(void)
 
     if (s_sys_info.ref_reset_type == RESET_TYPE_POWEROFF)
     {
-        
+
     }
     dynamic_sys_info_save();
     //dynamic_timer_start(enum_timer_reset_delay_check_timer,30*1000, (void *)dynamic_reset_delay_check,0,0);
