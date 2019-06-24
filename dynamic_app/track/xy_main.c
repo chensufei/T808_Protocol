@@ -155,6 +155,38 @@ void xy_t808_param_reset(void)
 	xy_info.t808_para.veh_color = 0;
 	
 	memcpy(xy_info.t808_para.veh_id, (u8 *)M_T808_DEF_VIN, strlen(M_T808_DEF_VIN));
+
+	xy_info.t808_para.tcp_ack_overtime = 60;	/* TCP超时时候 */
+	xy_info.t808_para.tcp_resend_cnt = 3;		/* tcp重传次数 */
+	xy_info.t808_para.report_type = 0;			/* 位置汇报策略,位置信息上报方式，0：定时汇报；1：定距汇报；2：定时和定距汇报 */
+	xy_info.t808_para.report_way = 0;			/* 位置汇报方案, 0：根据 ACC 状态； 1：根据登录状态和 ACC 状态，先判断登录状态，若登录再根据 ACC 状态 */
+
+	xy_info.t808_para.sos_freq = 5;				/* 紧急报警时间，默认是5s */
+	xy_info.t808_para.def_distance = 300;		/* 缺省距离汇报间隔,默认是300m */
+	xy_info.t808_para.sos_distance = 50;		/* 紧急距离汇报间隔,默认是50m */
+	xy_info.t808_para.degree = 7;				/* 拐点补传角度, <180° */
+	xy_info.t808_para.fencing_radius = 300;		/* 电子围栏半径（非法位移阈值），单位为米，默认300m */
+
+	memset(xy_info.t808_para.txt_number, 0, sizeof(xy_info.t808_para.txt_number));		/* 文本号码，接收短信/报警 */
+
+	//报警开关默认都打开
+	xy_info.t808_para.alarm_sw.val = 0;				/* 报警开关字节，对应位置信息里面的报警位，1-代表屏蔽 */
+
+	//短信报警默认都关闭
+	xy_info.t808_para.alarm_sms_sw.val = 1;			/* 报警发送文本 SMS 开关，与位置信息汇报消息中的报警标志相对应，相应位为 1 则相应报警时发送文本 SMS */
+
+	xy_info.t808_para.over_speed = 120;				/* 最高速度，单位为公里每小时(km/h)默认120km/h */
+	xy_info.t808_para.speed_keep_time = 10;			/* 超速持续时间，单位为秒（s）默认10s */
+
+	xy_info.t808_para.over_speed_pre_val = 110;		/* 超速持续时间，单位为秒（s），默认110km/h */
+
+	xy_info.t808_para.hit_param_val = 0x0a01;		/* 碰撞报警参数设置：
+	  												b7-b0： 碰撞时间，单位 4ms；
+	  												b15-b8：碰撞加速度，单位 0.1g，设置范围在：0-79 之间，默认为10。 */
+	xy_info.t808_para.roll_over_param_val = 30;		/* 侧翻报警参数设置:侧翻角度，单位 1 度，默认为 30 度。 */
+
+	xy_info.t808_para.gpsMode = 1;   /* GPS定位模式，0 - 不支持GPS定位，1-支持GPS定位 */
+	xy_info.t808_para.bdMode = 1;    /* bd定位模式，0 - 不支持GPS定位，1-支持GPS定位 */
 }
 
 /*******************************************************************
@@ -270,7 +302,7 @@ void xy_main_init(void)
     }
     if (strlen((char*)xy_info.dev_num) == 0 || strncmp((char*)xy_info.dev_num,"FFFFFFFFFFFF",DEV_PHONE_NUM_DEFAULT_LEN) || strncmp((char*)xy_info.dev_num,"ffffffffffff",DEV_PHONE_NUM_DEFAULT_LEN))
     {
-        memcpy(xy_info.dev_num,&app_cntx->imei[3],DEV_PHONE_NUM_DEFAULT_LEN);
+        memcpy(xy_info.dev_num,&app_cntx->imei[4], DEV_PHONE_NUM_DEFAULT_LEN);
     }
 #ifdef __XY_MILEAGE_SUPPORT__
     xy_mil_init(xy_info.mileage);

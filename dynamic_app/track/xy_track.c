@@ -25,8 +25,14 @@
 void xy_track_dataup_task(void*ptr)
 {
     XY_INFO_T * xy_info = xy_get_info();
-    kal_int32 task_time = 5;
- 
+	T808_PARA_T *t808_para = &(xy_info->t808_para);
+	dynamic_gps_info_t *gps_info = dynamic_gps_get_info();
+	kal_int32 task_time = 5;
+	kal_uint32 distance = 0;
+	static double last_pos_lat = 0;
+    static double last_pos_lng = 0;
+
+#if 0
     if (xy_info->mode == XY_TRACK_MODE3 && xy_info->sport_state == 0)
     {
         applib_time_struct systime;
@@ -42,6 +48,7 @@ void xy_track_dataup_task(void*ptr)
         {
             if ((systime_sec - xy_info->slp_sectime) > (24*60*60))
             {
+            	/* 休眠每隔24小时上传一条位置数据 */
                 xy_info->slp_sectime = systime_sec;				
                 //xy_soc_location_up(); // 模式3 24小时上传一条数据
             }
@@ -72,12 +79,118 @@ void xy_track_dataup_task(void*ptr)
         }
     }
 
-    if (task_time == 0)
+	if (task_time == 0)
     {
         dynamic_error("xy_track_dataup_task 异常参数");
         task_time= 40;
     }
-    dynamic_timer_start(enum_timer_track_task_dataup_timer,task_time*1000,(void*)xy_track_dataup_task,NULL,FALSE);
+
+	dynamic_timer_start(enum_timer_track_task_dataup_timer,task_time*1000,(void*)xy_track_dataup_task,NULL,FALSE);	
+#else
+	/* 如果有下发临时跟踪设备 */
+	if ((t808_para->tracking_time_sec > 0) && (t808_para->tracking_cylce > 0))
+	{
+		xy_soc_location_up();
+
+		last_pos_lat = gps_info->lat;
+		last_pos_lng = gps_info->lng;
+		
+		if (t808_para->tracking_time_sec <= t808_para->tracking_cylce)
+		{
+			/* 当跟踪的时间小于跟踪时间间隔，就只上传最后一次了 */
+			t808_para->tracking_cylce = 0;
+			t808_para->tracking_time_sec = 0;
+		}
+
+		task_time = t808_para->tracking_cylce;
+
+		dynamic_timer_start(enum_timer_track_task_dataup_timer, task_time * 1000,(void*)xy_track_dataup_task,NULL,FALSE);	
+		return;
+	}
+
+	/* 根据上报方式，定时上报还是定距离上报，还是定时和定距上报 */
+	if (0 == t808_para->report_type) //定时上报
+	{
+		//如果是紧急状态下
+
+		if (0 == t808_para->report_way)
+		{
+			//直接根据acc去判断
+			if (XY_TRACK_MODE1 == xy_info->mode)
+			{
+				xy_soc_location_up();
+
+				last_pos_lat = gps_info->lat;
+				last_pos_lng = gps_info->lng;
+				task_time = xy_info->freq;
+			}
+		}
+		else if (1 == t808_para->report_way)
+		{
+			//先判断登录状态，再根据ACC去判断
+			if (xy_soc_get_auth_ok_state())
+			{
+				if (XY_TRACK_MODE1 == xy_info->mode)
+				{
+					xy_soc_location_up();
+
+					last_pos_lat = gps_info->lat;
+					last_pos_lng = gps_info->lng;
+					task_time = xy_info->freq;
+				}
+			}
+		}
+
+		if (0 == task_time)
+		{
+			task_time = 5;
+		}
+
+		dynamic_timer_start(enum_timer_track_task_dataup_timer, task_time * 1000,(void*)xy_track_dataup_task,NULL,FALSE);	
+		return;
+	}
+
+	if (1 == t808_para->report_type)//定距上报
+	{
+		if (XY_TRACK_MODE1 == xy_info->mode)
+		{
+			//直接根据acc去判断
+			if ((0 == t808_para->report_way) || (xy_soc_get_auth_ok_state() && (1 == t808_para->report_way)))
+			{
+				if (dynamic_gps_is_inflection_point())
+				{
+					xy_soc_location_up();
+
+					last_pos_lat = gps_info->lat;
+					last_pos_lng = gps_info->lng;
+					task_time = 5;
+				}
+				else
+				{
+					/* 从其他模式过来的话，里面就上报一个点 */
+					distance = dynamic_gps_get_distance(gps_info->lat, gps_info->lng, last_pos_lat, last_pos_lng);
+			        if (distance >= t808_para->def_distance)
+			        {
+			        	xy_soc_location_up();
+
+						last_pos_lat = gps_info->lat;
+						last_pos_lng = gps_info->lng;				
+					}
+					task_time = 1;					
+				}
+			}
+		}
+
+		dynamic_timer_start(enum_timer_track_task_dataup_timer, task_time * 1000,(void*)xy_track_dataup_task,NULL,FALSE);
+		return;
+	}
+
+	if (2 == t808_para->report_type)//定时定距上报
+	{
+		
+		return;
+	}
+#endif
 }
 
 /*******************************************************************

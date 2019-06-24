@@ -208,6 +208,8 @@ int dynamic_cmd_debug(char type,char*num,char *cmd,dynamic_custom_cmdLine *str)
         break;
 
     }
+
+	dynamic_free(askdata);
     return ret;
 }
 /*******************************************************************
@@ -261,6 +263,7 @@ int dynamic_cmd_atd(char type,char*num,char *cmd,dynamic_custom_cmdLine *str)
         break;
 
     }
+    dynamic_free(askdata);
     return ret;
 }
 
@@ -316,6 +319,7 @@ int dynamic_cmd_gpslog(char type,char*num,char *cmd,dynamic_custom_cmdLine *str)
         break;
 
     }
+    dynamic_free(askdata);
     return ret;
 }
 
@@ -380,6 +384,7 @@ int dynamic_cmd_sr(char type,char*num,char *cmd,dynamic_custom_cmdLine *str)
         break;
 
     }
+    dynamic_free(askdata);
     return ret;
 }
 
@@ -518,7 +523,8 @@ int dynamic_cmd_format(char type,char*num,char *cmd,dynamic_custom_cmdLine *str)
 		break;
 
 	}
-	return ret; 
+	dynamic_free(askdata);
+    return ret;
 }
 
 /*******************************************************************
@@ -594,7 +600,8 @@ int dynamic_cmd_ip(char type,char*num,char *cmd,dynamic_custom_cmdLine *str)
 		break;
 
 	}
-	return ret;
+	dynamic_free(askdata);
+    return ret;
 }
 
 /*******************************************************************
@@ -647,7 +654,146 @@ int dynamic_cmd_factoy(char type,char*num,char *cmd,dynamic_custom_cmdLine *str)
         break;
 
     }
+    dynamic_free(askdata);
     return ret;
+}
+
+/*******************************************************************
+** 函数名:	   dynamic_cmd_devid
+** 函数描述:   
+** 参数:	devid=13025082345 - 写指令  / devid? - 读指令
+** 返回:	   
+********************************************************************/
+int dynamic_cmd_devid(char type,char*num,char *cmd,dynamic_custom_cmdLine *str)
+{
+	int ret = DYNAMIC_AT_ERROR;
+	custom_cmd_mode_enum result;
+	kal_int16 asklen = 0;
+	XY_INFO_T * xy_info = xy_get_info();
+	char *askdata = dynamic_malloc_malloc(DYNAMIC_CMD_ASK_LEN);
+
+	if (askdata == NULL)
+	{
+		return ret;
+	}
+	memset(askdata,0,DYNAMIC_CMD_ASK_LEN);
+	
+	result = dynamic_cmd_find_cmd_mode(str);	
+	switch (result)
+	{
+		case CUSTOM_SET_OR_EXECUTE_MODE:
+		{
+			char devid[13] = {0};
+			int len = strlen(&str->character[str->position]);
+
+			if (len > 0)
+			{
+				memset(devid, 0, sizeof(devid));
+				if (len > 12)
+				{
+					memcpy(devid, &str->character[str->position], 12);
+				}
+				else
+				{
+					memcpy(devid, &str->character[str->position], len);
+				}
+
+				memset(xy_info->dev_num, 0, sizeof(xy_info->dev_num));
+				memcpy(xy_info->dev_num, devid, strlen(devid));
+				
+				asklen += sprintf(&askdata[asklen],"Set Device Id Ok\r\n");
+				dynamic_cmd_ask(type,num,askdata,asklen);
+				ret = DYNAMIC_AT_RET;
+			}
+		}
+		break;
+
+		case CUSTOM_READ_MODE:
+		{
+			asklen += sprintf(&askdata[asklen],"Get Device Id [%s] Ok\r\n", xy_info->dev_num);
+			dynamic_cmd_ask(type,num,askdata,asklen);
+			ret = DYNAMIC_AT_RET;
+		}
+		break;
+
+		case CUSTOM_TEST_MODE:
+
+		break;
+
+		case CUSTOM_ACTIVE_MODE:
+		
+		break;
+
+		default:
+
+		break;
+
+	}
+	dynamic_free(askdata);
+	return ret;
+}
+
+/*******************************************************************
+** 函数名:	   dynamic_cmd_report_mode
+** 函数描述:   
+** 参数:	   reportmode=0/1/2   上报模式，0-定时上报，1-定距上报，2-定时和定距上报 / reportmode?
+** 返回:	   
+********************************************************************/
+int dynamic_cmd_report_mode(char type,char*num,char *cmd,dynamic_custom_cmdLine *str)
+{
+	int ret = DYNAMIC_AT_ERROR;
+	custom_cmd_mode_enum result;
+	kal_int16 asklen = 0;
+	XY_INFO_T * xy_info = xy_get_info();
+	char *askdata = dynamic_malloc_malloc(DYNAMIC_CMD_ASK_LEN);
+
+	if (askdata == NULL)
+	{
+		return ret;
+	}
+	memset(askdata,0,DYNAMIC_CMD_ASK_LEN);
+	
+	result = dynamic_cmd_find_cmd_mode(str);	
+	switch (result)
+	{
+		case CUSTOM_SET_OR_EXECUTE_MODE:
+		{
+			int len = strlen(&str->character[str->position]);
+			char val = str->character[str->position];
+
+			if ((1 == len) && ((0x30 == val) || (0x31 == val) || (0x32 == val)))
+			{
+				xy_info->t808_para.report_type = val - 0x30;
+				asklen += sprintf(&askdata[asklen],"Set Report Mode Ok\r\n");
+				dynamic_cmd_ask(type,num,askdata,asklen);
+				ret = DYNAMIC_AT_RET;
+			}
+		}
+		break;
+
+		case CUSTOM_READ_MODE:
+		{
+			asklen += sprintf(&askdata[asklen],"Get Report Mode [%d] Ok\r\n", xy_info->t808_para.report_type);
+			dynamic_cmd_ask(type,num,askdata,asklen);
+			ret = DYNAMIC_AT_RET;
+		}
+		break;
+
+		case CUSTOM_TEST_MODE:
+
+		break;
+
+		case CUSTOM_ACTIVE_MODE:
+		
+		break;
+
+		default:
+
+		break;
+
+	}
+	dynamic_free(askdata);
+	return ret;
 }
 
 /*******************************************************************
@@ -769,6 +915,8 @@ void dynamic_cmd_init(void)
     cmd_table[s_cmd_num].sstr = "FORMAT"; 		cmd_table[s_cmd_num++].entryproc = dynamic_cmd_format;
 	cmd_table[s_cmd_num].sstr = "IP"; 			cmd_table[s_cmd_num++].entryproc = dynamic_cmd_ip;
 	cmd_table[s_cmd_num].sstr = "FACTORY"; 		cmd_table[s_cmd_num++].entryproc = dynamic_cmd_factoy;
+	cmd_table[s_cmd_num].sstr = "DEVID"; 		cmd_table[s_cmd_num++].entryproc = dynamic_cmd_devid;
+	cmd_table[s_cmd_num].sstr = "REPORTMODE"; 	cmd_table[s_cmd_num++].entryproc = dynamic_cmd_report_mode;
 	
 #ifdef __XY_SUPPORT__
 

@@ -83,6 +83,34 @@ typedef struct _alm_mode_
     XY_ALM_MODE_E mode; 
 }XY_ALM_PARA_T;
 
+typedef struct _t808_alarm_type_
+{
+	u32 sos:1;				//紧急,收到应答后清零
+	u32 over_speed:1;		//超速,实时
+	u32 fatigue:1;			//疲劳，实时
+	u32 dangerous:1;		//危险，收到应答后清零
+	u32 gpsErr:1;			//GNSS 模块发生故障 实时
+	u32 gpsOpen:1;			//GNSS 天线未接或被剪断 实时
+	u32 gpsShort:1;			//GNSS 天线短路 实时
+	u32 ter_power_low:1;	//终端主电源欠压 实时
+	u32 ter_power_off:1;	//终端主电源掉电 实时
+	u32 lcd_err:1;
+	u32 tts_err:1;
+	u32 restore:2;
+	u32 pre_over_speed:1;	//超速预警 实时
+	u32 pre_fatigue:1;		//疲劳驾驶预警 实时
+	u32 restore1:5;
+	u32 in_out_area:1;		//进出区域 收到应答后清零
+	u32 in_out_line:1;		//进出路线  收到应答后清零
+	u32 restore2:4;
+	u32 veh_stolen:1;		//车辆被盗(通过车辆防盗器)  实时
+	u32 veh_illegal_on:1;	//车辆非法点火  收到应答后清零
+	u32 veh_illegal_move:1;	//车辆非法位移  收到应答后清零
+	u32 pre_hit_warn:1;		//碰撞预警  实时
+	u32 pre_roll_over_warn:1;//侧翻预警 实时
+	u32 restore3:1;
+} xy_t808_alarm_type;
+
 
 /* 终端注册 */
 typedef struct _t808_para_
@@ -97,19 +125,29 @@ typedef struct _t808_para_
     kal_uint8 auth_code[T808_AUTH_CODE_LEN+1];		/* 鉴权码信息 */
 	kal_uint8 auth_code_len;						/* 鉴权码长度 */
 
-	kal_uint16 tcp_ack_overtime;					/* TCP超时时候 */
-	kal_uint16 tcp_resend_cnt;						/* tcp重传次数 */
+	kal_uint32 tcp_ack_overtime;					/* TCP超时时候 */
+	kal_uint32 tcp_resend_cnt;						/* tcp重传次数 */
 	kal_uint8 report_type;							/* 位置汇报策略,位置信息上报方式，0：定时汇报；1：定距汇报；2：定时和定距汇报 */
 	kal_uint8 report_way;							/* 位置汇报方案, 0：根据 ACC 状态； 1：根据登录状态和 ACC 状态，先判断登录状态，若登录再根据 ACC 状态 */
 
 	kal_uint32 sos_freq;							/* 紧急报警时间，默认是5s */
-	kal_uint32 def_distance;						/* 缺省距离汇报间隔,默认是30m */
-	kal_uint32 sos_distance;						/* 缺省距离汇报间隔,默认是10m */
+	kal_uint32 def_distance;						/* 缺省距离汇报间隔,默认是300m */
+	kal_uint32 sos_distance;						/* 紧急汇报间隔,默认是50m */
 	kal_uint16 degree;								/* 拐点补传角度, <180° */
 	kal_uint16 fencing_radius;						/* 电子围栏半径（非法位移阈值），单位为米，默认300m */
 	char txt_number[MAX_PHONE_NUM_LEN + 1];			/* 文本号码，接收短信/报警 */
-	kal_uint32 alarm_sw;							/* 报警开关字节，对应位置信息里面的报警位，1-代表屏蔽 */
-	kal_uint32 alarm_sms_sw;						/* 报警发送文本 SMS 开关，与位置信息汇报消息中的报警标志相对应，相应位为 1 则相应报警时发送文本 SMS */
+
+	union
+	{
+		kal_uint32 val;								/* 报警开关字节，对应位置信息里面的报警位，1-代表屏蔽 */
+		xy_t808_alarm_type type;
+	} alarm_sw;
+
+	union
+	{
+		kal_uint32 val;								/* 报警发送文本 SMS 开关，与位置信息汇报消息中的报警标志相对应，相应位为 1 则相应报警时发送文本 SMS */
+		xy_t808_alarm_type type;
+	} alarm_sms_sw;
 
 	kal_uint32 over_speed;							/* 最高速度，单位为公里每小时(km/h)默认120km/h */
 	kal_uint32 speed_keep_time;						/* 超速持续时间，单位为秒（s）默认10s */
@@ -123,8 +161,14 @@ typedef struct _t808_para_
 	kal_uint16 roll_over_param_val;					/* 侧翻报警参数设置：
 													   侧翻角度，单位 1 度，默认为 30 度。 */
 
-	kal_uint8 gpsMode;							   /* GPS定位模式，0 - 不支持GPS定位，1-支持GPS定位 */
-	kal_uint8 bdMode;							   /* bd定位模式，0 - 不支持GPS定位，1-支持GPS定位 */
+	kal_uint8 gpsMode;							   	/* GPS定位模式，0 - 不支持GPS定位，1-支持GPS定位 */
+	kal_uint8 bdMode;							   	/* bd定位模式，0 - 不支持GPS定位，1-支持GPS定位 */
+
+	kal_uint16 tracking_cylce;					/* 临时跟踪的时间间隔，单位为秒（s），0 则停止跟踪。停止跟踪无需带后继字段 */
+	kal_uint32 tracking_time_sec;				/* 单位为秒（s），终端在接收到位置跟踪控制消息后，
+							   						在有效期截止时间之前，依据消息中的时间间隔发送位置汇报 */
+
+	kal_uint8 restore[128];							/* 预留128个字节，为后面添加数据做准备 */
 }T808_PARA_T;
 
 typedef struct _xy_info_
@@ -189,7 +233,7 @@ typedef struct _xy_info_
     kal_uint8 realy_crl; // 继电器控制
     kal_uint32 slp_sectime; // 休眠时的时间
     kal_uint8 acc_off_flg; // ACC 从on变为off
-    kal_uint8 sport_state; // 运动状态
+    kal_uint8 sport_state; // 运动状态,  1- 运行唤醒状态
     kal_uint32 sport_sectime; // 最后检测到运动的时间秒
     kal_uint32 accoff_sectime; // 熄火的时间
     kal_uint32 mileage; // 里程

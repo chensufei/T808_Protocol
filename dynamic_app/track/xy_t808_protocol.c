@@ -108,9 +108,6 @@ typedef enum _xy_ctrl_ter_cmd_e
 typedef struct _xy_t808_data_info
 {
 	u16 serialNo;						/* 序列号 */
-	u16 tracking_cylce;					/* 临时跟踪的时间间隔，单位为秒（s），0 则停止跟踪。停止跟踪无需带后继字段 */
-	u32 tracking_time_sec;				/* 单位为秒（s），终端在接收到位置跟踪控制消息后，
-							   				在有效期截止时间之前，依据消息中的时间间隔发送位置汇报 */
 	u8 ctrl_cmd_type;					/* 平台下发控制指令类型, 3-关机，4-复位重启，5-恢复出厂设置 */
 } xy_t808_data_info;
 
@@ -119,7 +116,7 @@ typedef struct _xy_t808_data_info
 ** 全局变量
 ********************************************************************/
 /* 808协议相关数据信息 */
-static xy_t808_data_info s_xy_t808_data = { 0, 0, 0, 0};
+static xy_t808_data_info s_xy_t808_data = { 0, 0};
 
 /**************************************************************************
 * 函  数: int CommCharToDec(char *chr)
@@ -320,13 +317,13 @@ static kal_uint16 xy_data_pack_position(kal_uint8 * dtr)
 
 
 /*******************************************************************
-** 函数: xy_data_pack_one_param_info
+** 函数: xy_data_pack_get_one_param_info
 ** 描述: 组包一个参数信息
 ** 参数: kal_uint8 * data : 输出组包内容
 *        u32 paramId : 参数ID
 ** 返回: kal_uint16: 返回长度	   
 ********************************************************************/
-static kal_uint16 xy_data_pack_one_param_info(kal_uint8 * data, u32 paramId)
+static kal_uint16 xy_data_pack_get_one_param_info(kal_uint8 * data, u32 paramId)
 {
 	int datalen = 0;
 	u8 paramlen = 0;
@@ -509,7 +506,7 @@ static kal_uint16 xy_data_pack_one_param_info(kal_uint8 * data, u32 paramId)
 			paramlen = sizeof(u32);
 			data[datalen++] = paramlen;
 	
-			paramval = t808_para->alarm_sw;
+			paramval = t808_para->alarm_sw.val;
 			M_BIG_ENDIAN_U32(paramval, dword);
 			memcpy(&data[datalen], (u8 *)&dword, paramlen);
 			datalen += paramlen;
@@ -520,7 +517,7 @@ static kal_uint16 xy_data_pack_one_param_info(kal_uint8 * data, u32 paramId)
 			paramlen = sizeof(u32);
 			data[datalen++] = paramlen;
 	
-			paramval = t808_para->alarm_sms_sw;
+			paramval = t808_para->alarm_sms_sw.val;
 			M_BIG_ENDIAN_U32(paramval, dword);
 			memcpy(&data[datalen], (u8 *)&dword, paramlen);
 			datalen += paramlen;
@@ -531,7 +528,7 @@ static kal_uint16 xy_data_pack_one_param_info(kal_uint8 * data, u32 paramId)
 			paramlen = sizeof(u32);
 			data[datalen++] = paramlen;
 	
-			paramval = t808_para->alarm_sms_sw;
+			paramval = t808_para->over_speed;
 			M_BIG_ENDIAN_U32(paramval, dword);
 			memcpy(&data[datalen], (u8 *)&dword, paramlen);
 			datalen += paramlen;
@@ -542,7 +539,7 @@ static kal_uint16 xy_data_pack_one_param_info(kal_uint8 * data, u32 paramId)
 			paramlen = sizeof(u32);
 			data[datalen++] = paramlen;
 	
-			paramval = t808_para->alarm_sms_sw;
+			paramval = t808_para->speed_keep_time;
 			M_BIG_ENDIAN_U32(paramval, dword);
 			memcpy(&data[datalen], (u8 *)&dword, paramlen);
 			datalen += paramlen;
@@ -639,6 +636,208 @@ static kal_uint16 xy_data_pack_one_param_info(kal_uint8 * data, u32 paramId)
 }
 
 /*******************************************************************
+** 函数: xy_data_pack_set_one_param_info
+** 描述: 设置一个参数信息
+** 参数: u32 paramId : 参数ID
+*		 u8 len : 长度
+*		 void *data : 值
+** 返回: void
+********************************************************************/
+static void xy_data_pack_set_one_param_info(u32 paramId, u8 len, void *data)
+{
+	u16 word = 0;
+	u32 dword = 0;
+	XY_INFO_T *xy_info = xy_get_info();
+    T808_PARA_T *t808_para = &xy_info->t808_para;
+	kal_uint8 set_server = 0;
+
+	switch(paramId)
+	{
+		case 0x0001:/* 心跳 */
+		{
+			memcpy((void *)&xy_info->heart_time, data, len);
+		}
+		break;
+		case 0x0002:/* TCP应答超时时间 */
+		{
+			memcpy((void *)&xy_info->t808_para.tcp_ack_overtime, data, len);
+		}
+		break;
+		case 0x0003:/* TCP重传次数 */
+		{
+			memcpy((void *)&xy_info->t808_para.tcp_resend_cnt, data, len);
+		}
+		break;
+		case 0x0010:/* APN接入点 */
+		{
+			if (len < sizeof(xy_info->apn))
+			{
+				memset((void *)xy_info->apn, 0, sizeof(xy_info->apn));
+				memcpy((void *)xy_info->apn, data, len);
+			}
+		}
+		break;
+		case 0x0013:/* IP/域名 */
+		{
+			if (len < sizeof(xy_info->server))
+			{
+				memset((void *)xy_info->server, 0, sizeof(xy_info->server));
+				memcpy((void *)xy_info->server, data, len);
+				set_server = 1;
+			}
+		}
+		break;
+		case 0x0018:/* 服务器 TCP 端口 */
+		{
+			memcpy((void *)&dword, data, len);
+			xy_info->port = (u16)(dword & 0xffff);
+			set_server = 1;
+		}
+		break;
+		case 0x0020:/* 位置汇报策略,位置信息上报方式，0：定时汇报；1：定距汇报；2：定时和定距汇报 */
+		{
+			memcpy((void *)&dword, data, len);
+			xy_info->t808_para.report_type = (u8)(dword & 0xff);
+		}
+		break;
+		case 0x0021:/* 位置汇报方案, 0：根据 ACC 状态； 1：根据登录状态和 ACC 状态，先判断登录状态，若登录再根据 ACC 状态 */
+		{
+			memcpy((void *)&dword, data, len);
+			xy_info->t808_para.report_way = (u8)(dword & 0xff);
+		}
+		break;
+		case 0x0028:/* 紧急报警时汇报时间间隔 */
+		{
+			memcpy((void *)&dword, data, len);
+			xy_info->t808_para.sos_freq = dword;
+		}
+		break;
+		case 0x0029:/* 缺省时间汇报间隔 */
+		{
+			memcpy((void *)&dword, data, len);
+			xy_info->freq = dword;
+		}
+		break;
+		case 0x002C:/* 缺省距离汇报间隔,单位为米（m），>0 */
+		{
+			memcpy((void *)&dword, data, len);
+			xy_info->t808_para.def_distance = dword;
+		}
+		break;
+		case 0x002F:/* 紧急报警时汇报距离间隔,单位为米（m），>0 */
+		{
+			memcpy((void *)&dword, data, len);
+			xy_info->t808_para.sos_distance = dword;
+		}
+		break;
+		case 0x0030:/* 拐点补传角度，<180° */
+		{
+			memcpy((void *)&word, data, len);
+			xy_info->t808_para.degree = word;
+		}
+		break;
+		case 0x0031:/* 电子围栏半径（非法位移阈值），单位为米 */
+		{
+			memcpy((void *)&word, data, len);
+			xy_info->t808_para.fencing_radius = word;
+		}
+		break;
+		case 0x0044:/* 接收终端 SMS 文本报警号码 */
+		{
+			if (len < sizeof(xy_info->t808_para.txt_number))
+			{
+				memset((void *)xy_info->t808_para.txt_number, 0, sizeof(xy_info->t808_para.txt_number));
+				memcpy((void *)xy_info->t808_para.txt_number, data, len);
+			}
+		}
+		break;
+		case 0x0050:/* 报警屏蔽字，与位置信息汇报消息中的报警标志相对应，相应位为 1则相应报警被屏蔽 */
+		{
+			memcpy((void *)&dword, data, len);
+			xy_info->t808_para.alarm_sw.val = dword;
+		}
+		break;
+		case 0x0051:/* 报警发送文本 SMS 开关，与位置信息汇报消息中的报警标志相对应，相应位为 1 则相应报警时发送文本 SMS */
+		{
+			memcpy((void *)&dword, data, len);
+			xy_info->t808_para.alarm_sms_sw.val = dword;
+		}
+		break;
+		case 0x0055:/* 最高速度，单位为公里每小时（km/h） */
+		{
+			memcpy((void *)&dword, data, len);
+			xy_info->t808_para.over_speed = dword;
+		}
+		break;
+		case 0x0056:/* 超速持续时间，单位为秒（s） */
+		{
+			memcpy((void *)&dword, data, len);
+			xy_info->t808_para.speed_keep_time = dword;
+		}
+		break;
+		case 0x005B:/* 超速报警预警差值，单位为 1/10Km/h */
+		{
+			memcpy((void *)&word, data, len);
+			xy_info->t808_para.over_speed_pre_val = word * 10;
+		}
+		break;
+		case 0x005D:/* 碰撞报警参数设置：
+						b7-b0： 碰撞时间，单位 4ms；
+						b15-b8：碰撞加速度，单位 0.1g，设置范围在：0-79 之间，默认为10。
+						*/
+		{
+			memcpy((void *)&dword, data, len);
+			xy_info->t808_para.hit_param_val = dword;
+		}
+		break;
+		case 0x005E:/* 侧翻报警参数设置：侧翻角度，单位 1 度，默认为 30 度。 */
+		{
+			memcpy((void *)&dword, data, len);
+			xy_info->t808_para.roll_over_param_val = dword;
+		}
+		break;
+		case 0x0080:/* 车辆里程表读数 */
+		{
+			memcpy((void *)&dword, data, len);
+			xy_info->mileage = dword;
+		}
+		break;
+		case 0x0081:/* 车辆所在的省域 ID */
+		{
+			memcpy((void *)&word, data, len);
+			xy_info->t808_para.provice_id = word;
+		}
+		break;
+		case 0x0082:/* 车辆所在的市域 ID */
+		{
+			memcpy((void *)&dword, data, len);
+			xy_info->t808_para.city_id = word;
+		}
+		break;
+		case 0x0084:/* 车牌颜色 */
+		{
+			u8 *val = (u8 *)data;
+			t808_para->veh_color = *val;
+		}
+		break;
+		case 0x0090:/* GNSS 定位模式 */
+		{
+			u8 *val = (u8 *)data;
+			t808_para->veh_color = *val;
+		}
+		break;
+		default:
+		break;
+	}
+
+	if (1 == set_server)
+    {
+        dynamic_timer_start(enum_timer_xy_soc_close_timer, 5*1000,(void*)xy_soc_close_delay,NULL,FALSE); 
+    }
+}
+
+
+/*******************************************************************
 ** 函数: xy_data_pack_all_param_info
 ** 描述: 组包参数信息
 ** 参数: kal_uint8 * dtr : 输出组包内容
@@ -663,7 +862,7 @@ static kal_uint16 xy_data_pack_all_param_info(kal_uint8 * dtr)
 	count = sizeof(paramIdS)/sizeof(paramIdS[0]);
 	for (i = 0; i < count; i++)
 	{
-		ret = xy_data_pack_one_param_info(&dtr[len], paramIdS[i]);
+		ret = xy_data_pack_get_one_param_info(&dtr[len], paramIdS[i]);
 		if (0 != ret)
 		{
 			len += ret;
@@ -692,7 +891,7 @@ static kal_uint16 xy_data_pack_spec_param_info(kal_uint8 * dtr, u8 sum, u32 *par
 	dtr[len++] = sum;
 	for (i = 0; i < sum; i++)
 	{
-		ret = xy_data_pack_one_param_info(&dtr[len], paramId[i]);
+		ret = xy_data_pack_get_one_param_info(&dtr[len], paramId[i]);
 		if (0 != ret)
 		{
 			len += ret;
@@ -1187,6 +1386,44 @@ void xy_soc_data_deal(kal_uint8*data,kal_uint32 len)
         break;
         
         case T808_MSGID_S_SET_PARAM:			/* 平台设置参数 */
+		{
+			kal_uint8 cnt = 0;
+			kal_uint16 pos = 0;
+			kal_uint8 i = 0;
+			kal_uint32 paramId = 0;
+			kal_uint8 paramlen = 0;
+			kal_uint16 word = 0;
+			kal_uint32 dword = 0;
+
+			cnt = info[pos++];
+			for (i = 0; i < cnt; i++)
+			{
+				paramId = dynamic_big_endian_pack_int(&info[pos]);
+				pos += sizeof(u32);
+				paramlen =  info[pos];
+				pos += sizeof(u8);
+
+				if (sizeof(u16) == paramlen)
+				{
+					word = dynamic_big_endian_pack_short(&info[pos]);
+					xy_data_pack_set_one_param_info(paramId, paramlen, (void *)&word);
+				}
+				else if (sizeof(u32) == paramlen)
+				{
+					dword = dynamic_big_endian_pack_short(&info[pos]);
+					xy_data_pack_set_one_param_info(paramId, paramlen, (void *)&dword);
+				}
+				else
+				{
+					xy_data_pack_set_one_param_info(paramId, paramlen, (void *)&info[pos]);
+				}
+
+				pos += paramlen;
+			}
+
+			xy_soc_ask_up(cmd, serialnum, 0);
+		}
+#if 0
         {
             kal_uint8 para_cnt = 0;
             kal_uint8 i;
@@ -1202,7 +1439,7 @@ void xy_soc_data_deal(kal_uint8*data,kal_uint32 len)
                 para_type = dynamic_big_endian_pack_short(&data[pos]);
                 pos += 2;
                 paralen = data[pos++];
-                
+				
                 switch (para_type)
                 {
                     case 0x0001: // 心跳发送间隔
@@ -1276,7 +1513,8 @@ void xy_soc_data_deal(kal_uint8*data,kal_uint32 len)
             {
                 dynamic_timer_start(enum_timer_xy_soc_close_timer,5*1000,(void*)xy_soc_close_delay,NULL,FALSE); 
             }
-        }
+		}
+#endif
         break;
         
         case T808_MSGID_S_QUERY_PARAM:		/* 平台查询参数 */
@@ -1344,11 +1582,11 @@ void xy_soc_data_deal(kal_uint8*data,kal_uint32 len)
 
 		case T808_MSGID_S_TEMP_POS_TRACKING:/* 临时位置跟踪控制 */
 		{
-			s_xy_t808_data.tracking_cylce = ((u16)info[0] << 8) | (u16)info[1];
-			s_xy_t808_data.tracking_time_sec = ((u32)info[2] << 24) | ((u32)info[3] << 16) | ((u32)info[4] << 8) | (u32)info[5];
+			t808_para->tracking_cylce = ((u16)info[0] << 8) | (u16)info[1];
+			t808_para->tracking_time_sec = ((u32)info[2] << 24) | ((u32)info[3] << 16) | ((u32)info[4] << 8) | (u32)info[5];
 
-			dynamic_log("临时位置跟踪的信息:cycle-%d, sec-%d", s_xy_t808_data.tracking_cylce,
-				s_xy_t808_data.tracking_time_sec);
+			dynamic_log("临时位置跟踪的信息:cycle-%d, sec-%d", t808_para->tracking_cylce,
+				t808_para->tracking_time_sec);
 
 			xy_soc_ask_up(T808_MSGID_S_TEMP_POS_TRACKING, serialnum, 0);
 		}
@@ -1357,7 +1595,7 @@ void xy_soc_data_deal(kal_uint8*data,kal_uint32 len)
         case T808_MSGID_S_ALARM_ACK:		/* 确认某个报警 */
 		{
 			//针对需要人工确认的报警
-			kal_uint16 recv_serial = ((u16)info[0] << 8) | (u16)info[1];
+			//kal_uint16 recv_serial = ((u16)info[0] << 8) | (u16)info[1];
 			kal_uint32 comfirm_alarm = ((u32)info[2] << 24) | ((u32)info[3] << 16) | ((u32)info[4] << 8) | (u32)info[5];
 
 			if (M_GET_BIT(comfirm_alarm, 0))

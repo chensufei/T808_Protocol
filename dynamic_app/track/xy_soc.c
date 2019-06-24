@@ -253,6 +253,15 @@ kal_uint8 xy_soc_close(void)
 	dynamic_soc_close(s_soc_cont.soc_id);
 	s_soc_cont.soc_id = -1;
 
+	s_xy_soc_info.ack_fail_cnt = 0;
+	s_xy_soc_info.auth_fail_cnt = 0;
+	s_xy_soc_info.auth_ok = 0;
+	s_xy_soc_info.close_soc_cnt = 0;
+	s_xy_soc_info.reg_ok = 0;
+	s_xy_soc_info.send_cnt = 0;
+	s_xy_soc_info.send_fail_cnt = 0;
+	s_xy_soc_info.soc_connect_ok = 0;
+
 	return 0;
 }
 

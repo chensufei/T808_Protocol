@@ -1,12 +1,15 @@
----- APP_CNTX_T Matches (11 in 10 files) ----
-Api.h (dynamic):APP_CNTX_T *dynamic_app_cntx_get(void);
-Dynamic_api.h (dynamic):DYNAMIC_DEFINE_API(APP_CNTX_T *,dynamic_app_cntx_get,void);
-Dynamic_gps.c (dynamic):        //APP_CNTX_T *app_cntx = dynamic_app_cntx_get();
-Dynamic_msg_at.c (dynamic):            APP_CNTX_T * app_cntx = dynamic_app_cntx_get();			
-Dynamic_sms.c (dynamic):    APP_CNTX_T * app_cntx = dynamic_app_cntx_get();
-Dynamic_struct.h (dynamic):} APP_CNTX_T;
-Xy_led.c (track):    APP_CNTX_T *app_cntx = dynamic_app_cntx_get();
-Xy_main.c (track):    //APP_CNTX_T * app_cntx = dynamic_app_cntx_get();
-Xy_main.c (track):    APP_CNTX_T * app_cntx = dynamic_app_cntx_get();
-Xy_soc.c (track):    APP_CNTX_T * app_cntx = dynamic_app_cntx_get();
-Xy_t808_protocol.c (track):    //APP_CNTX_T * app_cntx = dynamic_app_cntx_get();
+---- dev_num Matches (24 in 4 files) ----
+Dynamic_msg_at.c (dynamic):				xy_info->dev_num
+Xy_main.c (track):    kal_uint8 dev_num[MAX_PHONE_NUM_LEN+1];
+Xy_main.c (track):    memset(dev_num,0,sizeof(dev_num));
+Xy_main.c (track):    memcpy(dev_num,xy_info.dev_num,strlen((char*)xy_info.dev_num));
+Xy_main.c (track):    memcpy(xy_info.dev_num,dev_num,strlen((char*)dev_num));
+Xy_main.c (track):    if (strlen((char*)xy_info.dev_num) == 0 || strncmp((char*)xy_info.dev_num,"FFFFFFFFFFFF",DEV_PHONE_NUM_DEFAULT_LEN) || strncmp((char*)xy_info.dev_num,"ffffffffffff",DEV_PHONE_NUM_DEFAULT_LEN))
+Xy_main.c (track):        memcpy(xy_info.dev_num,&app_cntx->imei[3],DEV_PHONE_NUM_DEFAULT_LEN);
+Xy_main.h (track):    kal_uint8 dev_num[MAX_PHONE_NUM_LEN+1]; // 设备手机号 默认使用IMEI 4~14位的值
+Xy_t808_protocol.c (track):        kal_uint8 dev_num[DEV_PHONE_NUM_DEFAULT_LEN + 1] = {0};
+Xy_t808_protocol.c (track):		memset(dev_num, '0', sizeof(dev_num));
+Xy_t808_protocol.c (track):        numlen = strlen((char*)xy_info->dev_num);
+Xy_t808_protocol.c (track):            memcpy(&dev_num[12 - numlen], xy_info->dev_num, numlen);
+Xy_t808_protocol.c (track):            memcpy(dev_num,xy_info->dev_num, 12);
+Xy_t808_protocol.c (track):        curlen += dynamic_ascii2bcd(&datastr[curlen], dev_num, numlen);
