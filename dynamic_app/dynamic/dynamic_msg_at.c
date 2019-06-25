@@ -363,17 +363,39 @@ int dynamic_cmd_sr(char type,char*num,char *cmd,dynamic_custom_cmdLine *str)
         {
             DYNAMIC_SYS_T *sys_info = dynamic_sys_get_info();
             APP_CNTX_T * app_cntx = dynamic_app_cntx_get();			
-			
-            asklen += sprintf(&askdata[asklen],"ver:%s\r\n",DYNAMIC_SOFT_VER);
-    	    asklen += sprintf(&askdata[asklen],"build date time:%s\r\n",dynamic_time_get_build_date_time());
-    	    asklen += sprintf(&askdata[asklen],"space total:%lld,%lld\r\n",dynamic_fs_get_total_space(),dynamic_fs_get_free_space());
-			asklen += sprintf(&askdata[asklen],"Server:%s,%d\r\n", xy_info->server, xy_info->port);
-			asklen += sprintf(&askdata[asklen],"plmn:%s\r\n",app_cntx->sim_plmn);
-            asklen += sprintf(&askdata[asklen],"imei:%s\r\n",app_cntx->imei);
-            asklen += sprintf(&askdata[asklen],"csq:%d\r\n",app_cntx->csq);
-            asklen += sprintf(&askdata[asklen],"ref_reset_type:%d\r\n",sys_info->ref_reset_type);
-            asklen += sprintf(&askdata[asklen],"end gps lat:%f,lng:%f\r\n",sys_info->end_gps.lat,sys_info->end_gps.lng);
-            
+
+			if (DYNAMIC_CMD_TYPE_UART == type)
+			{
+	            dynamic_log("ver:%s\r\n"
+							"build date time:%s\r\n"
+							"space total:%lld,%lld\r\n"
+							"Server:%s,%d\r\n"
+							"DevID:%s\r\n"
+							"Tid:%s\r\n"
+							"plmn:%s\r\n"
+							"imei:%s\r\n"
+							"csq:%d\r\n"
+							"ref_reset_type:%d\r\n"
+							"end gps lat:%f,lng:%f\r\n"	,
+							DYNAMIC_SOFT_VER, dynamic_time_get_build_date_time(), dynamic_fs_get_total_space(),
+							dynamic_fs_get_free_space(), xy_info->server, xy_info->port, xy_info->dev_num,
+							xy_info->t808_para.dev_id,app_cntx->sim_plmn,app_cntx->imei,app_cntx->csq,
+							sys_info->ref_reset_type,sys_info->end_gps.lat,sys_info->end_gps.lng);
+				asklen = 0;
+			}
+			else if (DYNAMIC_CMD_TYPE_SMS == type)
+			{
+				asklen += sprintf(&askdata[asklen],"ver:%s\r\n",DYNAMIC_SOFT_VER);
+	    	    asklen += sprintf(&askdata[asklen],"build time:%s\r\n",dynamic_time_get_build_date_time());
+	    	    asklen += sprintf(&askdata[asklen],"space:%lld,%lld\r\n",dynamic_fs_get_total_space(),dynamic_fs_get_free_space());
+				asklen += sprintf(&askdata[asklen],"Ip:%s,%d\r\n", xy_info->server, xy_info->port);
+				asklen += sprintf(&askdata[asklen],"Id:%s\r\n", xy_info->dev_num);
+				asklen += sprintf(&askdata[asklen],"plmn:%s\r\n",app_cntx->sim_plmn);
+	            asklen += sprintf(&askdata[asklen],"imei:%s\r\n",app_cntx->imei);
+	            asklen += sprintf(&askdata[asklen],"csq:%d\r\n",app_cntx->csq);
+	            asklen += sprintf(&askdata[asklen],"reset:%d\r\n",sys_info->ref_reset_type);
+	            asklen += sprintf(&askdata[asklen],"end gps lat:%f,lng:%f\r\n",sys_info->end_gps.lat,sys_info->end_gps.lng);
+			}
             dynamic_cmd_ask(type,num,askdata,asklen);
             ret = DYNAMIC_AT_RET;	
         }
@@ -641,6 +663,7 @@ int dynamic_cmd_factoy(char type,char*num,char *cmd,dynamic_custom_cmdLine *str)
         case CUSTOM_ACTIVE_MODE:
         {
 			xy_info_reset();
+			xy_soc_clear_link_info();
 
             asklen += sprintf(&askdata[asklen],"Restore Factory Settings Ok\r\n");
             
@@ -664,7 +687,7 @@ int dynamic_cmd_factoy(char type,char*num,char *cmd,dynamic_custom_cmdLine *str)
 ** 参数:	devid=13025082345 - 写指令  / devid? - 读指令
 ** 返回:	   
 ********************************************************************/
-int dynamic_cmd_devid(char type,char*num,char *cmd,dynamic_custom_cmdLine *str)
+static int dynamic_cmd_devid(char type,char*num,char *cmd,dynamic_custom_cmdLine *str)
 {
 	int ret = DYNAMIC_AT_ERROR;
 	custom_cmd_mode_enum result;
@@ -703,6 +726,9 @@ int dynamic_cmd_devid(char type,char*num,char *cmd,dynamic_custom_cmdLine *str)
 				
 				asklen += sprintf(&askdata[asklen],"Set Device Id Ok\r\n");
 				dynamic_cmd_ask(type,num,askdata,asklen);
+
+				xy_soc_clear_link_info();
+
 				ret = DYNAMIC_AT_RET;
 			}
 		}
@@ -711,6 +737,85 @@ int dynamic_cmd_devid(char type,char*num,char *cmd,dynamic_custom_cmdLine *str)
 		case CUSTOM_READ_MODE:
 		{
 			asklen += sprintf(&askdata[asklen],"Get Device Id [%s] Ok\r\n", xy_info->dev_num);
+			dynamic_cmd_ask(type,num,askdata,asklen);
+			ret = DYNAMIC_AT_RET;
+		}
+		break;
+
+		case CUSTOM_TEST_MODE:
+
+		break;
+
+		case CUSTOM_ACTIVE_MODE:
+		
+		break;
+
+		default:
+
+		break;
+
+	}
+	dynamic_free(askdata);
+	return ret;
+}
+
+/*******************************************************************
+** 函数名:	   dynamic_cmd_tid
+** 函数描述:   
+** 参数:	tid=1302508 - 写指令  / tid? - 读指令
+** 返回:	   
+********************************************************************/
+static dynamic_cmd_tid(char type,char*num,char *cmd,dynamic_custom_cmdLine *str)
+{
+	int ret = DYNAMIC_AT_ERROR;
+	custom_cmd_mode_enum result;
+	kal_int16 asklen = 0;
+	XY_INFO_T * xy_info = xy_get_info();
+	char *askdata = dynamic_malloc_malloc(DYNAMIC_CMD_ASK_LEN);
+
+	if (askdata == NULL)
+	{
+		return ret;
+	}
+	memset(askdata,0,DYNAMIC_CMD_ASK_LEN);
+	
+	result = dynamic_cmd_find_cmd_mode(str);	
+	switch (result)
+	{
+		case CUSTOM_SET_OR_EXECUTE_MODE:
+		{
+			char tid[8] = {0};
+			int len = strlen(&str->character[str->position]);
+
+			if (len > 0)
+			{
+				
+				memset(tid, 0, sizeof(tid));
+				if (len > 7)
+				{
+					memcpy(tid, &str->character[str->position], 7);
+					len = 7;
+				}
+				else
+				{
+					memcpy(tid, &str->character[str->position], len);
+				}
+
+				memset(xy_info->t808_para.dev_id, 0, sizeof(xy_info->t808_para.dev_id));
+				memcpy(xy_info->t808_para.dev_id, tid, len);
+				
+				asklen += sprintf(&askdata[asklen],"Set Terminal Id Ok\r\n");
+				dynamic_cmd_ask(type,num,askdata,asklen);
+
+				xy_soc_clear_link_info();
+				ret = DYNAMIC_AT_RET;
+			}
+		}
+		break;
+
+		case CUSTOM_READ_MODE:
+		{
+			asklen += sprintf(&askdata[asklen],"Get Terminal Id [%s] Ok\r\n", xy_info->t808_para.dev_id);
 			dynamic_cmd_ask(type,num,askdata,asklen);
 			ret = DYNAMIC_AT_RET;
 		}
@@ -916,6 +1021,7 @@ void dynamic_cmd_init(void)
 	cmd_table[s_cmd_num].sstr = "IP"; 			cmd_table[s_cmd_num++].entryproc = dynamic_cmd_ip;
 	cmd_table[s_cmd_num].sstr = "FACTORY"; 		cmd_table[s_cmd_num++].entryproc = dynamic_cmd_factoy;
 	cmd_table[s_cmd_num].sstr = "DEVID"; 		cmd_table[s_cmd_num++].entryproc = dynamic_cmd_devid;
+	cmd_table[s_cmd_num].sstr = "TID"; 			cmd_table[s_cmd_num++].entryproc = dynamic_cmd_tid;
 	cmd_table[s_cmd_num].sstr = "REPORTMODE"; 	cmd_table[s_cmd_num++].entryproc = dynamic_cmd_report_mode;
 	
 #ifdef __XY_SUPPORT__

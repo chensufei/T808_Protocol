@@ -1327,6 +1327,7 @@ void xy_soc_data_deal(kal_uint8*data,kal_uint32 len)
 
 					if (!ask_result)
 					{
+						xy_soc_set_auth_ok_state(1);
 						xy_soc_set_ack_fail_cnt(0);
 						dynamic_timer_start(enum_timer_soc_task_timer, 300, (void*)xy_soc_task,NULL,FALSE);
 					}
@@ -1376,8 +1377,12 @@ void xy_soc_data_deal(kal_uint8*data,kal_uint32 len)
 					t808_para->auth_code_len = (len - DEV_PHONE_NUM_DEFAULT_LEN - 5);
                 	memcpy(t808_para->auth_code, &info[3], t808_para->auth_code_len);
 					xy_soc_set_ack_fail_cnt(0);
+					xy_soc_set_reg_ok_state(1);
+
 					dynamic_debug("ÖÕ¶Ë×¢²áÓ¦´ð:%d,auth_code:%s", ask_result, t808_para->auth_code);
 					dynamic_log_hex(t808_para->auth_code, t808_para->auth_code_len);
+
+					dynamic_timer_start(enum_timer_soc_task_timer, 100,(void*)xy_soc_task,NULL,FALSE);
 					break;
 				}
             }

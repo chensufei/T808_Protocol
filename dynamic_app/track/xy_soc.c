@@ -81,6 +81,7 @@ static xy_soc_info_st s_xy_soc_info;
 ********************************************************************/
 void xy_soc_set_ack_fail_cnt(kal_uint8 value)
 {
+	s_xy_soc_info.send_cnt = 0;
     s_xy_soc_info.ack_fail_cnt = value;
 }
 
@@ -128,6 +129,29 @@ kal_uint8 xy_soc_get_auth_ok_state(void)
 {
     return s_xy_soc_info.auth_ok;
 }
+
+/*******************************************************************
+** 函数: xy_soc_set_auth_ok_state
+** 描述: 设置鉴权成功状态
+** 参数:       
+** 返回:       
+********************************************************************/
+void xy_soc_set_auth_ok_state(kal_uint8 flag)
+{
+    s_xy_soc_info.auth_ok = flag;
+}
+
+/*******************************************************************
+** 函数: xy_soc_set_reg_ok_state
+** 描述: 设置注册成功状态
+** 参数:       
+** 返回:       
+********************************************************************/
+void xy_soc_set_reg_ok_state(kal_uint8 flag)
+{
+	s_xy_soc_info.reg_ok = flag;
+}
+
 
 /*******************************************************************
 ** 函数: xy_soc_clear_link_info
@@ -727,6 +751,12 @@ void xy_soc_task(void*ptr)
 #if 1
 	if (p_connection && (DYNAMIC_SOC_CONNECTED == p_connection->status))
 	{
+
+		dynamic_log("connet:%d, reg:%d, auth:%d\r\n", s_xy_soc_info.soc_connect_ok, s_xy_soc_info.reg_ok, s_xy_soc_info.auth_ok);
+		dynamic_log("auth fail cnt:%d, send cnt:%d, ack fail cnt:%d, send fail cnt:%d close soc cnt:%d\r\n",
+			s_xy_soc_info.auth_fail_cnt, s_xy_soc_info.send_cnt, s_xy_soc_info.ack_fail_cnt, s_xy_soc_info.send_fail_cnt,
+			s_xy_soc_info.close_soc_cnt);
+	
 		/* 已连接上平台 */
 		if (1 == s_xy_soc_info.soc_connect_ok)
 		{
@@ -735,8 +765,6 @@ void xy_soc_task(void*ptr)
 			{
 				/* 位置包的发送 */
 				tasktime = 5*1000;
-
-				//dynamic_soc_send_task();
 
 				goto cycle;
 			}
