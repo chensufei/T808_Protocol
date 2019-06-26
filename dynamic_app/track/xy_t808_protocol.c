@@ -1353,6 +1353,8 @@ void xy_soc_data_deal(kal_uint8*data,kal_uint32 len)
 					if (!ask_result)
 					{
 						//从队列中删除已成功发送的数据
+						xy_soc_clear_data_flag();
+						 dynamic_timer_start(enum_timer_soc_task_timer, 100,(void*)xy_soc_task,NULL,FALSE);
 					}
 				}
 				break;

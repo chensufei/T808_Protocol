@@ -326,6 +326,8 @@ int xy_cmd_gpssnr(char type,char*num,char *cmd,dynamic_custom_cmdLine *str)
 
         break;
     }
+
+	dynamic_free(askdata);
     return ret;
 }
 

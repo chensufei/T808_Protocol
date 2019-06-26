@@ -422,8 +422,10 @@ void xy_alm_pow_check(void)
                     adc_cnt = 0;
                     voltage = adc_sum/XY_BAT_ADC_CNT;
                     adc_sum = 0;
-                    voltage = voltage*1043;
-                    voltage = voltage/43000;
+                    voltage = (double)voltage*37.451;
+                    voltage = voltage/1000;
+                    voltage = voltage*1.01725;
+
                     dynamic_debug("pow voltage:%dmv,vinoff:%d,vinon:%d",voltage,vinoff,vinon);
                     s_vin = voltage;
                     if (voltage < vinoff)

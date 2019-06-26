@@ -48,7 +48,7 @@ int dynamic_main(void *load_api_ptr, unsigned int msg_id_base)
         dynamic_telephony_init();
 	    dynamic_msg_at_init();
 	    dynamic_gps_init();
-	    //dynamic_sensor_init();
+	    dynamic_sensor_init();
 #ifdef __XY_SUPPORT__
 	    xy_main_init();
 #endif

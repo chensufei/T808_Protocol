@@ -296,6 +296,13 @@ void xy_main_init(void)
             xy_info_reset();
         }
     }
+    
+    if (strlen((char*)xy_info.server) < 3)
+    {
+        dynamic_error("·þÎñÆ÷Òì³£");
+        xy_info_reset();
+    }
+    
     if (sys_info->ref_reset_type == RESET_TYPE_POWEROFF)
     {
         xy_info.reset_cnt = 0;

@@ -22,6 +22,7 @@ typedef enum enum_timer_
 	enum_timer_reset_timer,
 	enum_timer_reset_delay_check_timer,
     enum_timer_start_reset_timer,
+    enum_timer_start_reset_later,
     enum_timer_sms_timer,
     enum_timer_gps_aid_timer,
     enum_timer_gps_timer,

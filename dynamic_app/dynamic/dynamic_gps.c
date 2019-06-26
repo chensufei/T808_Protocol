@@ -19,6 +19,7 @@ typedef enum
 {
     ENUM_GPS_AIDING_INIT,
     ENUM_GPS_EPO_AIDING,
+    ENUM_GPS_REFLOC_AIDING,
     ENUM_GPS_EPO_ERR
 }ENUM_GPS_AIDING_E;
 
@@ -483,7 +484,7 @@ void dynamic_gps_aid_task(void*str)
     kal_uint32 timevalue = 1000;
     applib_time_struct cur_time;
     dynamic_gps_info_t *gps_info = dynamic_gps_get_info();
-    DYNAMIC_SYS_T * sys_info = dynamic_sys_get_info();
+    //DYNAMIC_SYS_T * sys_info = dynamic_sys_get_info();
     
     dynamic_time_get_systime(&cur_time);
 
@@ -510,23 +511,16 @@ void dynamic_gps_aid_task(void*str)
             
             case ENUM_GPS_EPO_AIDING:
             {
-#if 0
                 kal_bool aid_res;
 
                 if (dynamic_epo_is_valid())
                 {
                     dynamic_debug("EPO¸¨Öú");
                     aid_res = dynamic_gps_epo_aiding();
-                    sys_info->end_gps.lat = 22.56602;
-                    sys_info->end_gps.lng = 113.94841;
-                    if (sys_info->end_gps.lat != 0.0 && sys_info->end_gps.lng != 0.0)
-                    {
-                        dynamic_debug("Î»ÖÃ¸¨Öú");
-                        dynamic_gps_refloc_aid(sys_info->end_gps.lat,sys_info->end_gps.lng,sys_info->end_gps.altitude);
-                    }
                     dynamic_debug("EPO:%d",aid_res);
-                    s_aiding_state = ENUM_GPS_AIDING_INIT;
-                    return;
+                    
+                    s_aiding_state = ENUM_GPS_REFLOC_AIDING;
+                    timevalue = 500;
                 }
                 else
                 {
@@ -539,8 +533,21 @@ void dynamic_gps_aid_task(void*str)
                         return;
                     }
                 }
-#endif
             }
+            break;
+
+            case ENUM_GPS_REFLOC_AIDING:
+			#if 0
+                sys_info->end_gps.lat = 22.56602;
+                sys_info->end_gps.lng = 113.94841;
+                if (sys_info->end_gps.lat != 0.0 && sys_info->end_gps.lng != 0.0)
+                {
+                    dynamic_debug("Î»ÖÃ¸¨Öú");
+                    dynamic_gps_refloc_aid(sys_info->end_gps.lat,sys_info->end_gps.lng,sys_info->end_gps.altitude);
+                }
+			#endif
+                s_aiding_state = ENUM_GPS_AIDING_INIT;
+                return;
             break;
 
             default:

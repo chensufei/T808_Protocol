@@ -122,7 +122,13 @@ void xy_track_dataup_task(void*ptr)
 
 				last_pos_lat = gps_info->lat;
 				last_pos_lng = gps_info->lng;
+
+				dynamic_log("cycle:%d\r\n", xy_info->freq);
 				task_time = xy_info->freq;
+			}
+			else
+			{
+				task_time = 5;
 			}
 		}
 		else if (1 == t808_para->report_way)
@@ -144,6 +150,7 @@ void xy_track_dataup_task(void*ptr)
 		if (0 == task_time)
 		{
 			task_time = 5;
+			dynamic_log("task_time:%d\r\n", task_time);
 		}
 
 		dynamic_timer_start(enum_timer_track_task_dataup_timer, task_time * 1000,(void*)xy_track_dataup_task,NULL,FALSE);	

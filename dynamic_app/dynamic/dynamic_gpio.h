@@ -20,13 +20,13 @@
 
 #ifdef __XY_SUPPORT__
 
-#define XY_ACC_CHECK_PORT 13 // 0acc使能
-#define XY_BREAK_CHECK_PORT 14 // 0剪线
+#define XY_ACC_CHECK_PORT 0 // 0 acc on  1 acc off
+#define XY_BREAK_CHECK_PORT 1 // 断外电检测 0接外电  1断外电
 #define XY_WATCHDOG_PORT 15
-#define XY_REALY_CRL_PORT 30 // 1断油路
+#define XY_REALY_CRL_PORT 21 // 1断油路
 
-#define XY_GSM_LED_PORT 40
-#define XY_GPS_LED_PORT 42
+#define XY_GSM_LED_PORT 30
+#define XY_GPS_LED_PORT 29
 
 
 

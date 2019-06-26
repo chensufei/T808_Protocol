@@ -44,10 +44,9 @@ static ASMRULE_T s_rule = {0x7e, 0x7d, 0x02, 0x01};
 static XY_CONTEXT_T s_soc_cont;
 static DYNAMIC_QUEUE_T* s_soc_queue = NULL;
 
-static kal_uint8 s_soc_nodata = 0;
+//static kal_uint8 s_soc_nodata = 0;
 static kal_uint8 s_noask_cnt = 0;
 static kal_uint8 s_heart_no_ask = 0;
-
 
 typedef struct _xy_soc_info_st
 {
@@ -59,6 +58,9 @@ typedef struct _xy_soc_info_st
 	u8 ack_fail_cnt;						//应答失败次数
 	u8 send_fail_cnt;						//发送失败的次数
 	u8 close_soc_cnt;						//在连接平台到发送鉴权过程中，关闭soc的次数
+
+	u8 pos_send_flag;						//位置发送的标志
+	u8 delay_cnt;							//延时，5s单位
 } xy_soc_info_st;
 
 void xy_soc_task(void*ptr);
@@ -323,8 +325,14 @@ kal_int8 xy_soc_send(kal_int8 socket, char *buf, kal_uint32 len)
     {
         dynamic_debug("send ok");
         result = 1;
-        xy_soc_heart_reset();
+        //xy_soc_heart_reset();
     }
+
+	if (data_dtr)
+	{
+		dynamic_free((void *)data_dtr);
+	}
+	
     return result;
 }
 
@@ -367,6 +375,7 @@ kal_uint8 xy_soc_data_empty(void)
 kal_bool xy_soc_data_pop(void)
 {
     dynamic_free(dynamic_queue_pop(s_soc_queue));
+	dynamic_debug("xy_soc_data_pop queue size:%d",s_soc_queue->size);
     return 1;
 }
 
@@ -416,6 +425,20 @@ kal_bool xy_soc_data_in(kal_uint8 *data,kal_uint16 len)
 }
 
 /*******************************************************************
+** 函数名:     xy_soc_clear_data_flag
+** 函数描述:  清除一次发送标志，删除数据
+** 参数:       
+** 返回:       
+********************************************************************/
+void xy_soc_clear_data_flag(void)
+{
+	s_xy_soc_info.pos_send_flag = 0;
+	s_xy_soc_info.delay_cnt = 0;
+	s_noask_cnt = 0;
+	xy_soc_data_pop();
+}
+
+/*******************************************************************
 ** 函数名:     xy_soc_list_data_send
 ** 函数描述:  
 ** 参数:       
@@ -424,14 +447,41 @@ kal_bool xy_soc_data_in(kal_uint8 *data,kal_uint16 len)
 kal_uint8 xy_soc_list_data_send(void)
 {
     XY_SOC_DATA_T * data_str;
-    kal_int32 ret;
-    XY_INFO_T * xy_info = xy_get_info();
+  //  XY_INFO_T * xy_info = xy_get_info();
 
     data_str = dynamic_queue_peek(s_soc_queue);
     if (data_str != NULL)
     {
-        char * cmdstr=NULL;
-        
+		dynamic_log("send flag:%d, delay_cnt:%d, s_noask_cnt = %d\r\n",
+			s_xy_soc_info.pos_send_flag, s_xy_soc_info.delay_cnt, s_noask_cnt);
+	
+    	if (!s_xy_soc_info.pos_send_flag)
+    	{
+			xy_soc_send(s_soc_cont.soc_id,(char*)data_str->str,data_str->len);
+			s_xy_soc_info.pos_send_flag = 1;
+			s_xy_soc_info.delay_cnt = 0;
+    	}
+		else
+		{
+			s_xy_soc_info.delay_cnt++;
+			if (s_xy_soc_info.delay_cnt >= 5)
+			{
+				//30s 超时没有应答
+				s_xy_soc_info.delay_cnt = 0;
+
+				s_noask_cnt++;
+				if (s_noask_cnt >= 3)
+				{
+					dynamic_debug("多次未收到应答，删除该条数据");
+		            xy_soc_data_pop();
+		            s_noask_cnt = 0;
+            		return 1;
+				}
+			}
+		}
+	
+#if 0  
+    	char * cmdstr=NULL;
         if (s_noask_cnt == XY_NOASK_CNT_FOR_CLOSE_SOC)
         {
             s_noask_cnt++;
@@ -455,8 +505,7 @@ kal_uint8 xy_soc_list_data_send(void)
             return 0;
         }
 
-        cmdstr = strstr((char*)data_str->str,",T19,");
-        if (strlen((char*)xy_info->user) == 0 || cmdstr != NULL || data_str->len == 0)
+        if (data_str->len == 0)
         {
             xy_soc_data_pop();
             return 1;
@@ -467,6 +516,7 @@ kal_uint8 xy_soc_list_data_send(void)
             dynamic_debug("数据发送成功，等待应答:%d",s_noask_cnt);
             return 2;
         }
+#endif
     }
     else
     {
@@ -602,7 +652,7 @@ void xy_soc_cb(DYNAMIC_SOC_CB_E type,kal_int8 socket,void *user_data, void *data
 			s_xy_soc_info.soc_connect_ok = 1;
 			s_xy_soc_info.reg_ok = 0;
 			s_xy_soc_info.auth_ok = 0;
-            dynamic_timer_start(enum_timer_soc_task_timer,5000,(void*)xy_soc_task,NULL,FALSE);
+            dynamic_timer_start(enum_timer_soc_task_timer, 100,(void*)xy_soc_task,NULL,FALSE);
         break;
         
         case DYNAMIC_SOC_CONNECT_FAILED: // 连接失败
@@ -622,7 +672,7 @@ void xy_soc_cb(DYNAMIC_SOC_CB_E type,kal_int8 socket,void *user_data, void *data
         case DYNAMIC_SOC_RECV: // 收到SOC数据
             dynamic_debug("xy_soc_cb DYNAMIC_SOC_RECV:%d,%s",len,data);
 			dynamic_log_hex(data,len);
-            s_soc_nodata = 0;
+            //s_soc_nodata = 0;
             xy_soc_recv_data(data,len);
         break;
         
@@ -743,7 +793,7 @@ void xy_soc_task(void*ptr)
     if (dynamic_telephony_call_status() == CALL_ACCEPT || dynamic_telephony_call_status() == CALL_CONNECT)
     {
         tasktime = 2*1000;
-        s_soc_nodata = 0;
+        //s_soc_nodata = 0;
         dynamic_timer_start(enum_timer_soc_task_timer,tasktime,(void*)xy_soc_task,NULL,FALSE);
         return;
     }
@@ -765,6 +815,8 @@ void xy_soc_task(void*ptr)
 			{
 				/* 位置包的发送 */
 				tasktime = 5*1000;
+
+				xy_soc_list_data_send();
 
 				goto cycle;
 			}
@@ -1118,7 +1170,7 @@ void xy_soc_err_check(void)
     {
         dynamic_debug("s_soc_nodata:%d",s_soc_nodata);
     }
-#endif
+
     if (++s_soc_nodata >= 15*6) //90s没有收到平台下发数据重启
     {
         s_soc_nodata = 0;
@@ -1126,6 +1178,8 @@ void xy_soc_err_check(void)
     }
 
     dynamic_timer_start(enum_timer_soc_err_check_timer,10*1000,(void*)xy_soc_err_check,NULL,FALSE); 
+#endif
+
 }
 
 /*******************************************************************
@@ -1272,7 +1326,7 @@ void xy_soc_init(void)
     }
 
     dynamic_timer_start(enum_timer_soc_task_timer,15*1000,(void*)xy_soc_task,NULL,FALSE); 
-    dynamic_timer_start(enum_timer_soc_err_check_timer,10*1000,(void*)xy_soc_err_check,NULL,FALSE); 
+    //dynamic_timer_start(enum_timer_soc_err_check_timer,10*1000,(void*)xy_soc_err_check,NULL,FALSE); 
     dynamic_timer_start(enum_timer_track_heart_timer,30*1000,(void*)xy_soc_heart_task,NULL,FALSE);
 }
 

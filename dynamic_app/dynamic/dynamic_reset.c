@@ -71,8 +71,8 @@ void dynamic_reset_now(void)
     }
     else
     {
-	    //dynamic_sys_reset();
-		dynamic_sys_shutdown(0);
+	    dynamic_sys_reset();
+		//dynamic_sys_shutdown(0);
 	    dynamic_log("dynamic_sys_reset......\r\n");
     }
 }

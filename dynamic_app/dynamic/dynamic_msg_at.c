@@ -141,6 +141,14 @@ int dynamic_cmd_reset(char type,char*num,char *cmd,dynamic_custom_cmdLine *str)
 		case CUSTOM_ACTIVE_MODE:
 			asklen = sprintf(askdata,"%s:%s\r\n",cmd,STRING_CMD_OK);
 			dynamic_cmd_ask(type,num,askdata,asklen);
+			if (type == DYNAMIC_CMD_TYPE_UART)
+			{
+                dynamic_start_reset(RESET_TYPE_FOR_CMD);
+			}
+			else
+			{
+                dynamic_timer_start(enum_timer_start_reset_later,10*1000, (void *)dynamic_reset_delay,0,0);
+			}
 			ret = DYNAMIC_AT_RET;
         break;
 
@@ -533,7 +541,9 @@ int dynamic_cmd_format(char type,char*num,char *cmd,dynamic_custom_cmdLine *str)
 		case CUSTOM_ACTIVE_MODE:	
 			dynamic_sys_info_reset();
 			dynamic_sms_list_reset();
-
+#ifdef __XY_SUPPORT__
+            xy_info_reset();
+#endif
 			asklen = sprintf(askdata,"%s:%s\r\n",cmd,STRING_CMD_OK);
 			dynamic_cmd_ask(type,num,askdata,asklen);
 			ret = DYNAMIC_AT_RET;
@@ -662,6 +672,9 @@ int dynamic_cmd_factoy(char type,char*num,char *cmd,dynamic_custom_cmdLine *str)
 
         case CUSTOM_ACTIVE_MODE:
         {
+			dynamic_file_dele(XY_INFO_FILE_NAME);
+			dynamic_file_dele(XY_INFO_FILE_BACKUP_NAME);
+
 			xy_info_reset();
 			xy_soc_clear_link_info();
 
@@ -902,6 +915,69 @@ int dynamic_cmd_report_mode(char type,char*num,char *cmd,dynamic_custom_cmdLine 
 }
 
 /*******************************************************************
+** 函数名:	   dynamic_cmd_cycle
+** 函数描述:   
+** 参数:	   cycle=time  >= 5 - 上传时间间隔 / cycle?
+** 返回:	   
+********************************************************************/
+int dynamic_cmd_cycle(char type,char*num,char *cmd,dynamic_custom_cmdLine *str)
+{
+	int ret = DYNAMIC_AT_ERROR;
+	custom_cmd_mode_enum result;
+	kal_int16 asklen = 0;
+	XY_INFO_T * xy_info = xy_get_info();
+	char *askdata = dynamic_malloc_malloc(DYNAMIC_CMD_ASK_LEN);
+
+	if (askdata == NULL)
+	{
+		return ret;
+	}
+	memset(askdata,0,DYNAMIC_CMD_ASK_LEN);
+	
+	result = dynamic_cmd_find_cmd_mode(str);	
+	switch (result)
+	{
+		case CUSTOM_SET_OR_EXECUTE_MODE:
+		{
+			int cycle = atoi(&str->character[str->position]);
+
+			if (cycle >= 5)
+			{
+				xy_info->freq = cycle;
+				asklen += sprintf(&askdata[asklen],"Set Cycle Ok\r\n");
+				dynamic_cmd_ask(type,num,askdata,asklen);
+				ret = DYNAMIC_AT_RET;
+			}
+		}
+		break;
+
+		case CUSTOM_READ_MODE:
+		{
+			asklen += sprintf(&askdata[asklen],"Get Report Mode [%d] Ok\r\n", xy_info->t808_para.report_type);
+			dynamic_cmd_ask(type,num,askdata,asklen);
+			ret = DYNAMIC_AT_RET;
+		}
+		break;
+
+		case CUSTOM_TEST_MODE:
+
+		break;
+
+		case CUSTOM_ACTIVE_MODE:
+		
+		break;
+
+		default:
+
+		break;
+
+	}
+	dynamic_free(askdata);
+	return ret;
+}
+
+
+/*******************************************************************
 ** 函数名:     dynamic_cmd_parse
 ** 函数描述:   
 ** 参数:       
@@ -1023,9 +1099,9 @@ void dynamic_cmd_init(void)
 	cmd_table[s_cmd_num].sstr = "DEVID"; 		cmd_table[s_cmd_num++].entryproc = dynamic_cmd_devid;
 	cmd_table[s_cmd_num].sstr = "TID"; 			cmd_table[s_cmd_num++].entryproc = dynamic_cmd_tid;
 	cmd_table[s_cmd_num].sstr = "REPORTMODE"; 	cmd_table[s_cmd_num++].entryproc = dynamic_cmd_report_mode;
-	
+	cmd_table[s_cmd_num].sstr = "CYCLE"; 		cmd_table[s_cmd_num++].entryproc = dynamic_cmd_cycle;
+		
 #ifdef __XY_SUPPORT__
-
     cmd_table[s_cmd_num].sstr = "GPSSNR"; cmd_table[s_cmd_num++].entryproc = xy_cmd_gpssnr;
 
 #endif
