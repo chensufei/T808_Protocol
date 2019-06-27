@@ -87,6 +87,12 @@ void xy_track_dataup_task(void*ptr)
 
 	dynamic_timer_start(enum_timer_track_task_dataup_timer,task_time*1000,(void*)xy_track_dataup_task,NULL,FALSE);	
 #else
+	
+	dynamic_log("time_sec:%d, cycle:%d\r\n",
+				t808_para->tracking_time_sec, t808_para->tracking_cylce);
+	
+	dynamic_log("type:%d, way:%d, mode:%d, freq:%d\r\n",
+					t808_para->report_type, t808_para->report_way, xy_info->mode, xy_info->freq);
 	/* 如果有下发临时跟踪设备 */
 	if ((t808_para->tracking_time_sec > 0) && (t808_para->tracking_cylce > 0))
 	{
@@ -277,20 +283,22 @@ void xy_track_mode_check(void)
     }
     else
     {
-        if (xy_info->acc_off_flg)
-        {            
-            if (xy_info->mode != XY_TRACK_MODE2)
+        if (xy_info->acc_off_flg)//从ON->OFF
+        {
+            if ((xy_info->mode != XY_TRACK_MODE2) && (XY_TRACK_MODE3 != xy_info->mode))
             {
+            	//非休眠的情况下
                 xy_track_set_mode(XY_TRACK_MODE2);
             }
+
             if (systime_sec > xy_info->accoff_sectime)
             {
                 kal_uint32 sleeptime = xy_info->slp_d_t;
 
-                if ((systime_sec - xy_info->accoff_sectime) >=  sleeptime)
+                if ((systime_sec - xy_info->accoff_sectime) >=  sleeptime)//熄火持续三分钟
                 {
                     xy_info->acc_off_flg = 0;
-                    xy_track_set_mode(XY_TRACK_MODE3);
+                    xy_track_set_mode(XY_TRACK_MODE3);//休眠
                 }
             }
             else
@@ -298,9 +306,9 @@ void xy_track_mode_check(void)
                 xy_info->accoff_sectime = systime_sec;
             }
         }
-        else
+        else//从OFF->ON，点火
         {
-            if (xy_info->sport_state == 1)
+            if (xy_info->sport_state == 1)//有持续震动
             {
                 xy_track_set_mode(XY_TRACK_MODE2);
             }

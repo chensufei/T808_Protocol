@@ -508,7 +508,7 @@ void dynamic_gps_aid_task(void*str)
                 
                 s_aiding_state = ENUM_GPS_EPO_AIDING;
             break;
-            
+ #if 0           
             case ENUM_GPS_EPO_AIDING:
             {
                 kal_bool aid_res;
@@ -535,7 +535,7 @@ void dynamic_gps_aid_task(void*str)
                 }
             }
             break;
-
+#endif
             case ENUM_GPS_REFLOC_AIDING:
 			#if 0
                 sys_info->end_gps.lat = 22.56602;

@@ -1,11 +1,2 @@
----- ack_fail_cnt Matches (10 in 1 files) ----
-Xy_soc.c (track):	u8 ack_fail_cnt;						//应答失败次数
-Xy_soc.c (track):    s_xy_soc_info.ack_fail_cnt = value;
-Xy_soc.c (track):    return s_xy_soc_info.ack_fail_cnt;
-Xy_soc.c (track):	s_xy_soc_info.ack_fail_cnt = 0;
-Xy_soc.c (track):	s_xy_soc_info.ack_fail_cnt = 0;
-Xy_soc.c (track):				s_xy_soc_info.ack_fail_cnt = 0;
-Xy_soc.c (track):				if (s_xy_soc_info.ack_fail_cnt >= 3)
-Xy_soc.c (track):					s_xy_soc_info.ack_fail_cnt = 0;
-Xy_soc.c (track):			if (s_xy_soc_info.ack_fail_cnt >= 3)
-Xy_soc.c (track):				s_xy_soc_info.ack_fail_cnt = 0;
+---- 切换工作模式 Matches (1 in 1 files) ----
+Xy_track.c (track):        dynamic_debug("切换工作模式:%d,%d",pre_mode,mode);

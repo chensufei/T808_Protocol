@@ -289,9 +289,10 @@ void xy_acc_check(void)
     static kal_uint8 accon = 0;
     static kal_uint8 accoff =0;
     XY_INFO_T * xy_info = xy_get_info();
+	char accSta = GPIO_ReadIO(XY_ACC_CHECK_PORT);
 
-    
-    if (GPIO_ReadIO(XY_ACC_CHECK_PORT) == 0)
+	dynamic_log("11111acc state:%d\r\n", accSta);
+    if (0 == accSta)
     {
         accoff = 0;
         if (++accon >= XY_ACC_CHECK_CNT)
@@ -353,8 +354,8 @@ void xy_alm_pow_init(void)
 {
     GPIO_ModeSetup(XY_BREAK_CHECK_PORT,0);   
     GPIO_InitIO(INPUT,XY_BREAK_CHECK_PORT);
-    //GPIO_PullenSetup(XY_BREAK_CHECK_PORT,1);
-    //GPIO_PullSelSetup(XY_BREAK_CHECK_PORT,1);
+    GPIO_PullenSetup(XY_BREAK_CHECK_PORT,1);
+    GPIO_PullSelSetup(XY_BREAK_CHECK_PORT,1);
 }
 
 /*******************************************************************
@@ -374,8 +375,8 @@ void xy_alm_pow_check(void)
     
     dynamic_adc_get_channel_voltage(DCL_PCBTMP_ADC_CHANNEL,&voltage);
 
-    //dynamic_debug("voltage:%d",voltage);
-    if ((GPIO_ReadIO(XY_BREAK_CHECK_PORT) != 0 ) || (voltage < 100000))
+    dynamic_debug("voltage:%d",voltage);
+    if ((GPIO_ReadIO(XY_BREAK_CHECK_PORT) != 0 ) || (voltage < 10000))
     {
         con_cnt = 0;
         if (++break_cnt >= XY_BREAK_CHECK_CNT)

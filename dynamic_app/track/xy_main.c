@@ -251,7 +251,7 @@ kal_uint8 xy_info_reset(void)
     xy_info.lbv = XY_DEFAULT_LBV; // 备用电池低电阈值 默认3.7V
 
     
-    xy_info.mode = XY_TRACK_MODE3; // // 0默认 1正常状态 2ACCOFF 3休眠状态
+    xy_info.mode = XY_TRACK_MODE1; // // 0默认 1正常状态 2ACCOFF 3休眠状态
 	xy_info.heart_time = 180;	
     
     xy_info.vibsensity = DYNAMIC_DEFAULT_VIBSENSITY; // 震动灵敏度 越大越灵敏
