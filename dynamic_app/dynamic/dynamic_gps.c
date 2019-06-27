@@ -138,7 +138,7 @@ void dynamic_gps_check_inflection( void)
 			 {
 			    s_is_inflection_point = 1;
 #ifdef __XY_SUPPORT__
-			    dynamic_timer_start(enum_timer_track_task_timer,100,(void*)xy_track_dataup_task,NULL,FALSE);
+			    dynamic_timer_start(enum_timer_track_task_dataup_timer,100,(void*)xy_track_dataup_task,NULL,FALSE);
 #endif
 			 }
 		}
@@ -292,6 +292,732 @@ void dynamic_gps_save_endgps(void)
     }
 }
 
+
+/*******************************************************************
+** 函数名:     dynamic_gps_str_to_time
+** 函数描述:   字符串时间转化为十进制时间
+** 参数:
+** 返回:
+********************************************************************/
+static void dynamic_gps_str_to_time(uct_gps_nmea_utc_time_struct *lptime, char *str)
+{
+    lptime->tag_hour = (str[0] - 48) * 10 + str[1] - 48;
+    lptime->tag_minute = (str[2] - 48) * 10 + str[3] - 48;
+    lptime->tag_second = (str[4] - 48) * 10 + str[5] - 48;
+    lptime->tag_millisecond = (str[7] - 48) * 10 + str[8] - 48;
+}
+
+
+/*******************************************************************
+** 函数名:     dynamic_gps_str_to_date
+** 函数描述:   字符串日期转化为十进制日期
+** 参数:
+** 返回:
+********************************************************************/
+static void dynamic_gps_str_to_date(uct_gps_nmea_utc_date_struct *lptime, char *str)
+{
+    lptime->tag_year = (str[4] - 48) * 10 + str[5] - 48;
+    lptime->tag_month = (str[2] - 48) * 10 + str[3] - 48;
+    lptime->tag_day = (str[0] - 48) * 10 + str[1] - 48;
+}
+
+/*******************************************************************
+** 函数名:     dynamic_gps_format_latlng
+** 函数描述:   11808.0945转化为118.1349
+** 参数:
+** 返回:
+********************************************************************/
+static double dynamic_gps_format_latlng(double laglong)
+{
+	int ret = (int)laglong / 100;
+	double fen = ((int)laglong % 100) / 60.0;
+	double miao = ((int)(laglong * 10000) % 10000) / 600000.00;
+
+	return ret + fen + miao;
+}
+
+/*****************************************************************************
+ * 函数名
+ *  dynamic_gps_parse_rmc
+ * 描述
+4、 Recommended Minimum Specific GPS/TRANSIT Data（RMC）推荐定位信息
+$GPRMC,060206.00,A,2236.91218,N,11403.24719,E,0.015,,130214,,,D*7E
+$GPRMC,<1>,<2>,<3>,<4>,<5>,<6>,<7>,<8>,<9>,<10>,<11>,<12>*hh<CR><LF>
+<1> UTC时间，hhmmss（时分秒）格式
+<2> 定位状态，A=有效定位，V=无效定位
+<3> 纬度ddmm.mmmm（度分）格式（前面的0也将被传输）
+<4> 纬度半球N（北半球）或S（南半球）
+<5> 经度dddmm.mmmm（度分）格式（前面的0也将被传输）
+<6> 经度半球E（东经）或W（西经）
+<7> 地面速率（000.0~999.9节，前面的0也将被传输）
+<8> 地面航向（000.0~359.9度，以真北为参考基准，前面的0也将被传输）
+<9> UTC日期，ddmmyy（日月年）格式
+<10> 磁偏角（000.0~180.0度，前面的0也将被传输）
+<11> 磁偏角方向，E（东）或W（西）
+<12> 模式指示（仅NMEA0183 3.00版本输出，A=自主定位，D=差分，E=估算，N=数据无效）
+
+ GPRMC - 推荐最小的GNSS规格数据
+typedef结构
+{
+    双tag_latitude;  纬度
+    双tag_longitude;  经度
+    浮tag_ground_speed;  对地速度，绳结
+    浮tag_trace_degree;  跟踪模式度，北部为0
+    浮tag_magnetic;
+    uct_gps_nmea_utc_time_struct tag_utc_time;   UTC时间
+    uct_gps_nmea_utc_date_struct tag_utc_date;   UTC日期
+    符号字符tag_status;  状态，V=导航接收机警
+    符号字符tag_north_south;   N或S
+    符号字符tag_east_west;   E或W
+    符号字符tag_magnetic_e_w;  磁E或
+    符号字符tag_cmode;  模式
+    符号字符tag_nav_status;  导航状态
+} uct_gps_nmea_rmc_struct;
+ *  void
+ *返回值
+ *  void
+ *****************************************************************************/
+int  dynamic_gps_parse_rmc(uct_gps_nmea_rmc_struct *lpg_rmc, char *str_data, int strlen1)
+{
+    char *pstr = 0;
+    char strtime[10] = {0};
+    char strdate[10] = {0};
+
+    pstr = strstr(str_data, "RMC,");
+    if(lpg_rmc)
+    {
+        if(pstr)
+        {
+            int i = 0;
+            char *tokens[12];
+            char temp = 0;
+
+            pstr += 4;
+
+            while (pstr && i < 12)
+            {
+                if (*pstr == ',')
+                {
+                    tokens[i++] = &temp;
+                }
+                else
+                {
+                    tokens[i++] = pstr;
+                }
+
+                pstr = strchr(pstr, ',');
+                if (pstr)
+                {
+                    pstr++;
+                }
+            }
+
+            if (i == 12)
+            {
+                sscanf(tokens[0], "%9c", strtime);
+                lpg_rmc->tag_status = *tokens[1];
+                sscanf(tokens[2], "%lf", &lpg_rmc->tag_latitude);
+                lpg_rmc->tag_north_south = *tokens[3];
+                sscanf(tokens[4], "%lf", &lpg_rmc->tag_longitude);
+                lpg_rmc->tag_east_west = *tokens[5];
+                sscanf(tokens[6], "%f", &lpg_rmc->tag_ground_speed);
+                sscanf(tokens[7], "%f", &lpg_rmc->tag_trace_degree);
+                sscanf(tokens[8], "%6c", strdate);
+                sscanf(tokens[9], "%f", &lpg_rmc->tag_magnetic);
+                lpg_rmc->tag_magnetic_e_w = *tokens[10];
+                lpg_rmc->tag_cmode = *tokens[11];
+
+                sprintf(lpg_rmc->tag_lat_str, "%f", lpg_rmc->tag_latitude);
+                sprintf(lpg_rmc->tag_lng_str, "%f", lpg_rmc->tag_longitude);
+
+                lpg_rmc->tag_latitude = dynamic_gps_format_latlng(lpg_rmc->tag_latitude);
+                lpg_rmc->tag_longitude = dynamic_gps_format_latlng(lpg_rmc->tag_longitude);
+                if(*strtime)
+                    dynamic_gps_str_to_time(&lpg_rmc->tag_utc_time, strtime);
+
+                if(*strdate)
+                    dynamic_gps_str_to_date(&lpg_rmc->tag_utc_date, strdate);
+            }
+            else
+            {
+                lpg_rmc->tag_latitude = 0;
+                lpg_rmc->tag_longitude = 0;
+                return 0;
+            }
+        }
+        else
+        {
+            return 0;
+        }
+    }
+    else
+    {
+        return 0;
+    }
+
+#if 0
+    dynamic_debug("latitude:%f,longitude:%f",s_gps_data.tag_rmc.tag_latitude,s_gps_data.tag_rmc.tag_longitude);
+    dynamic_debug("tag_lat_str:%s,tag_lng_str:%s",s_gps_data.tag_rmc.tag_lat_str,s_gps_data.tag_rmc.tag_lng_str);
+    dynamic_debug("speed:%f*1.852=%f,degree:%f,magnetic:%f",s_gps_data.tag_rmc.tag_ground_speed,(s_gps_data.tag_rmc.tag_ground_speed*1.852),
+                    s_gps_data.tag_rmc.tag_trace_degree,s_gps_data.tag_rmc.tag_magnetic);
+    dynamic_debug("utc_date:%02d,%02d,%02d",s_gps_data.tag_rmc.tag_utc_date.tag_year,
+        s_gps_data.tag_rmc.tag_utc_date.tag_month,s_gps_data.tag_rmc.tag_utc_date.tag_day);
+    dynamic_debug("utc_time:%02d,%02d,%02d",s_gps_data.tag_rmc.tag_utc_time.tag_hour,
+        s_gps_data.tag_rmc.tag_utc_time.tag_minute,s_gps_data.tag_rmc.tag_utc_time.tag_second);
+    dynamic_debug("status:%c,north_south:%c,east_west:%c,magnetic_e_w:%c",s_gps_data.tag_rmc.tag_status,
+        s_gps_data.tag_rmc.tag_north_south,s_gps_data.tag_rmc.tag_east_west,s_gps_data.tag_rmc.tag_magnetic_e_w);
+    dynamic_debug("cmod:%c,nav_status:%c",s_gps_data.tag_rmc.tag_cmode,s_gps_data.tag_rmc.tag_nav_status);
+#endif
+    
+    return 1;
+}
+
+/*****************************************************************************
+ * 函数名
+ *  dynamic_gps_parse_gga
+ * 描述
+ *1、 Global Positioning System Fix Data（GGA）GPS定位信息
+$GPGGA,060206.00,2236.91218,N,11403.24719,E,2,10,0.88,118.2,M,-2.4,M,,0000*45
+$GPGGA,<1>,<2>,<3>,<4>,<5>,<6>,<7>,<8>,<9>,M,<10>,M,<11>,<12>*hh<CR><LF>
+<1> UTC时间，hhmmss（时分秒）格式
+<2> 纬度ddmm.mmmm（度分）格式（前面的0也将被传输）
+<3> 纬度半球N（北半球）或S（南半球）
+<4> 经度dddmm.mmmm（度分）格式（前面的0也将被传输）
+<5> 经度半球E（东经）或W（西经）
+<6> GPS状态：0=未定位，1=非差分定位，2=差分定位，6=正在估算
+<7> 正在使用解算位置的卫星数量（00~12）（前面的0也将被传输）
+<8> HDOP水平精度因子（0.5~99.9）
+<9> 海拔高度（-9999.9~99999.9）
+<10> 地球椭球面相对大地水准面的高度
+<11> 差分时间（从最近一次接收到差分信号开始的秒数，如果不是差分定位将为空）
+<12> 差分站ID号0000~1023（前面的0也将被传输，如果不是差分定位将为空）
+ * 参数说明
+typedef结构
+{
+    双tag_latitude ; / *纬度南< 0北> 0
+    双tag_longitude ; / *经度西< 0东> 0
+    浮tag_h_precision ; / *精度水平稀释
+    双tag_altitude ; / *天线高度高于/低于均值海平面（大地水准面）
+    浮tag_unit_of_altitude ;天线高度/ *单位，米
+    浮tag_geoidal ; / *大地水准面分离，在WGS -84大地之间的区别
+    浮tag_unit_of_geoidal ;大地水准面分离/ *单位，米
+    浮tag_gps_age ; / *差分GPS数据，时间以秒为单位自去年SC104年龄
+    无符号短tag_station_id ; / *差分基准站ID ， 0000-1023
+    无符号字符tag_sat_in_fix ; / *卫星的使用数量
+    uct_gps_nmea_utc_time_struct tag_utc_time ; / *时间（UTC ）
+    符号字符tag_north_south ; / *南北
+    符号字符tag_east_west ; / *向东或向西
+    符号字符tag_quality ; / * GPS的质量指标
+} uct_gps_nmea_gga_struct
+ *  void
+ *返回值
+ *  void
+ *****************************************************************************/
+int  dynamic_gps_parse_gga(uct_gps_nmea_gga_struct *lpgga, char *str_gps_data, int strlen1)
+{
+    char *pstr;
+    char strtime[20];
+
+    memset(strtime, 0, sizeof(strtime));
+
+    pstr = strstr(str_gps_data, "GGA,");
+
+    if(lpgga && pstr)
+    {
+        int i = 0;
+        char *tokens[13];
+        char temp = 0;
+        
+        pstr += 4;
+
+        while (pstr && i < 13)
+        {
+            if (*pstr == ',')
+            {
+                tokens[i++] = &temp;
+            }
+            else
+            {
+                tokens[i++] = pstr;
+            }
+            pstr = strchr(pstr, ',');
+            if (pstr)
+                pstr++;
+        }
+
+        if (i == 13)
+        {
+            sscanf(tokens[0], "%9c", strtime);
+            sscanf(tokens[1], "%lf", &lpgga->tag_latitude);
+            lpgga->tag_north_south = *tokens[2];
+            sscanf(tokens[3], "%lf", &lpgga->tag_longitude);
+            lpgga->tag_east_west = *tokens[4];
+            lpgga->tag_quality = atoi(tokens[5]);
+            lpgga->tag_sat_in_fix = atoi(tokens[6]);
+            sscanf(tokens[7], "%f", &lpgga->tag_h_precision);
+            sscanf(tokens[8], "%lf", &lpgga->tag_altitude);
+            // *lpgga->tag_unit_of_altitude = *tokens[9];
+            sscanf(tokens[10], "%f", &lpgga->tag_geoidal);
+            // *lpgga->tag_unit_of_geoidal = tokens[11];
+            sscanf(tokens[12], "%f", &lpgga->tag_gps_age);
+
+            lpgga->tag_latitude = dynamic_gps_format_latlng(lpgga->tag_latitude);
+            lpgga->tag_longitude = dynamic_gps_format_latlng(lpgga->tag_longitude);
+            if(*strtime)
+                dynamic_gps_str_to_time(&lpgga->tag_utc_time, strtime);
+        }
+        else
+        {
+            lpgga->tag_latitude = 0;
+            lpgga->tag_longitude = 0;
+            return 0;
+        }
+    }
+    else
+    {
+        return 0;
+    }
+    
+#if 0
+    dynamic_debug("sat_in_fix:%d,h_precision:%f,altitude:%lf",s_gps_data.tag_gga.tag_sat_in_fix,
+            s_gps_data.tag_gga.tag_h_precision,s_gps_data.tag_gga.tag_altitude);
+#endif
+    return 1;
+
+}
+
+/*****************************************************************************
+ * 函数名
+ *  dynamic_gps_parse_gsa
+ * 描述
+ *2、 GPS DOP and Active Satellites（GSA）当前卫星信息
+$GPGSA,<1>,<2>,<3>,<3>,<3>,<3>,<3>,<3>,<3>,<3>,<3>,<3>,<3>,<3>,<4>,<5>,<6>*hh<CR><LF>
+<1> 模式，M=手动，A=自动
+<2> 定位类型，1=没有定位，2=2D定位，3=3D定位
+<3> PRN码（伪随机噪声码），正在用于解算位置的卫星号（01~32，前面的0也将被传输）。
+<4> PDOP位置精度因子（0.5~99.9）
+<5> HDOP水平精度因子（0.5~99.9）
+<6> VDOP垂直精度因子（0.5~99.9）
+ * 参数说明
+	 float   tag_pdop;       PDOP in meters
+    float   tag_hdop;       HDOP in meters
+    float   tag_vdop;       VDOP in meters
+    kal_uint16     tag_sate_id[12]; ID of satellites
+    signed char     tag_op_mode;      Selection mode: A=auto M=manual
+    signed char      tag_fix_mode;     Mode
+ *  void
+ *返回值
+ *  void
+ *****************************************************************************/
+int  dynamic_gps_parse_gsa(uct_gps_nmea_gsa_struct *lpgsa, char *str_gps_data, int strlen1)
+{
+    char *pstr = 0;
+    kal_uint8 i = 0,fix_num = 0;
+    kal_uint8 gsa_num = 0;
+
+    if (lpgsa == NULL)
+    {
+        return 0;
+    }
+    
+    pstr = strstr(str_gps_data, "GSA,");
+    while(pstr)
+    {
+        memset(lpgsa, 0, sizeof(uct_gps_nmea_gsa_struct)*4);
+        
+        pstr += 4;
+        sscanf(pstr, "%c,%c,%hu,%hu,%hu,%hu,%hu,%hu,%hu,%hu,%hu,%hu,%hu,%hu,%f,%f,%f", //
+            &lpgsa->tag_op_mode,
+            &lpgsa->tag_fix_mode,
+            &lpgsa->tag_sate_id[0],
+            &lpgsa->tag_sate_id[1],
+            &lpgsa->tag_sate_id[2],
+            &lpgsa->tag_sate_id[3],
+            &lpgsa->tag_sate_id[4],
+            &lpgsa->tag_sate_id[5],
+            &lpgsa->tag_sate_id[6],
+            &lpgsa->tag_sate_id[7],
+            &lpgsa->tag_sate_id[8],
+            &lpgsa->tag_sate_id[9],
+            &lpgsa->tag_sate_id[10],
+            &lpgsa->tag_sate_id[11],
+            &lpgsa->tag_pdop,
+            &lpgsa->tag_hdop,
+            &lpgsa->tag_vdop);
+
+        for(i = 0; i < 12; i++)
+        {
+            if(lpgsa->tag_sate_id[i] > 0)
+                fix_num++;
+        }
+
+        pstr = strstr(pstr, "GSA,");
+        gsa_num++;
+        lpgsa += 1;
+    }
+#if 1
+    dynamic_debug("GSA NUM:%d,FIX NUM:%d",gsa_num,fix_num);
+#endif
+
+    return 1;
+}
+
+kal_uint16 CharToInt(char *src, kal_uint8 len)
+{
+	kal_uint16 Idata;
+	kal_uint8 i;
+	
+	Idata =0;
+	for(i =0; i<len; i++)
+	{
+		if(src[i] == 0x0a || src[i] == 0x0d || src[i] == 0x20 || src[i] == 0x09)
+			continue;
+		if(src[i] < '0' || src[i] > '9')
+			break;
+		Idata *=10;
+		Idata +=src[i] - '0';
+	}
+	return Idata;
+}
+
+/*****************************************************************************
+ * 函数名
+ *  dynamic_gps_parse_gsv
+ * 描述
+3、 GPS Satellites in View（GSV）可见卫星信息
+$GPGSV,<1>,<2>,<3>,<4>,<5>,<6>,<7>,…<4>,<5>,<6>,<7>*hh<CR><LF>
+<1> GSV语句的总数
+<2> 本句GSV的编号
+<3> 可见卫星的总数（00~12，前面的0也将被传输）
+<4> PRN码（伪随机噪声码）（01~32，前面的0也将被传输）
+<5> 卫星仰角（00~90度，前面的0也将被传输）
+<6> 卫星方位角（000~359度，前面的0也将被传输）
+<7> 信噪比（00~99dB，没有跟踪到卫星时为空，前面的0也将被传输）
+注：<4>,<5>,<6>,<7>信息将按照每颗卫星进行循环显示，每条GSV语句最多可以显示4颗卫星的信息。
+其他卫星信息将在下一序列的NMEA0183语句中输出。
+GPGSV -- GNSS Satellites in View
+typedef结构
+{
+    签署短期tag_msg_sum;  消息的总数
+    签署短期tag_msg_index;  消息号
+    签署短期tag_sates_in_view;  鉴于卫星
+    签署短期tag_max_snr;  最大信噪比
+    签署短期tag_min_snr;   最小SNR
+    结构
+    {
+        无符号字符tag_sate_id;  卫星ID
+        无符号字符tag_elevation;  抬高度
+        无符号字符tag_azimuth;  方位以度为true
+        无符号字符tag_snr;  以dB信噪比
+    } tag_rsv[DE_GPS_NMEA_MAX_SVVIEW];
+} uct_gps_nmea_gsv_struct;
+ *  void
+ *返回值
+ *  void
+ *****************************************************************************/
+int  dynamic_gps_parse_gsv(uct_gps_nmea_gsv_struct *lpgsv, char *str_gps_data, int strlen1)
+{
+    char *pstr = NULL;
+    short     tag_msg_sum = 0;              /*total number of messages*/
+    short     tag_msg_index = 0;            /*message number*/
+    short     tag_sates_in_view = 0;              /*Max snr*/
+    kal_uint8 i,j;
+    
+    if (lpgsv == NULL)
+    {
+        return 0;
+    }
+    
+    pstr = strstr(str_gps_data, "GSV,");
+
+    if(pstr)
+    {
+        memset(lpgsv,0,sizeof(uct_gps_nmea_gsv_struct));
+        pstr = pstr + 4;
+        sscanf(pstr, "%hd,%hd,%hd", //
+            &tag_msg_sum,
+            &tag_msg_index,
+            &tag_sates_in_view);
+        
+        
+        lpgsv->tag_msg_sum = tag_msg_sum;
+        lpgsv->tag_msg_index = tag_msg_index;
+        lpgsv->tag_sates_in_view = tag_sates_in_view;
+        
+        for (i=0;i<lpgsv->tag_msg_sum;i++)
+        {
+            char * estr = NULL;
+            char * cstr = NULL;
+            char * nstr = NULL;
+            kal_uint16 len;
+            
+            estr = strstr(pstr, "*");
+
+            if (estr == NULL)
+            {
+                break;
+            }
+
+            cstr = strstr(pstr, ",");
+            if (cstr == NULL)
+            {
+                break;
+            }
+            cstr++;
+            cstr = strstr(cstr, ",");
+            if (cstr == NULL)
+            {
+                break;
+            }
+            cstr++;
+
+            cstr = strstr(cstr, ",");
+            if (cstr == NULL)
+            {
+                break;
+            }
+            cstr++;
+
+            for(j =0; j < 4; j++)
+            {
+        		// <4>  卫星编号
+        		if ((nstr = strchr(cstr, ',')) == NULL)
+        			break;
+        		len = (kal_uint8)(nstr - cstr);
+        		if(len)
+        		{
+        			lpgsv->tag_rsv[i*4+j].tag_sate_id = (kal_uint16)CharToInt(cstr, len);
+        		}
+        		else
+        		{
+        			lpgsv->tag_rsv[i*4+j].tag_sate_id = 0;
+        		}
+        		cstr = nstr + 1;
+        		
+        		// <5>  仰角
+        		if ((nstr = strchr(cstr, ',')) == NULL)
+        			break;
+        		len = (kal_uint8)(nstr - cstr);
+        		if(len)
+        		{
+        			lpgsv->tag_rsv[i*4+j].tag_elevation = (kal_int16)CharToInt(cstr, len);
+        		}
+        		else
+        		{
+        			lpgsv->tag_rsv[i*4+j].tag_elevation = 0;
+        		}
+        		cstr = nstr + 1;
+
+        		// <6>  方位角
+        		if ((nstr = strchr(cstr, ',')) == NULL)
+        			break;
+        		len = (kal_uint8)(nstr - cstr);
+        		if(len)
+        		{
+        			lpgsv->tag_rsv[i*4+j].tag_azimuth = (kal_int16)CharToInt(cstr, len);
+        		}
+        		else
+        		{
+        			lpgsv->tag_rsv[i*4+j].tag_azimuth = 0;
+        		}
+        		cstr = nstr + 1;
+        		
+        		// <7>  信噪比
+        		nstr = strchr(cstr, ',');
+        		if (nstr == NULL || nstr > estr)
+        		{
+        		    nstr = (estr-1);
+        			len = (kal_uint8)(nstr - cstr);
+        			if(len)
+        			{
+        			    lpgsv->tag_rsv[i*4+j].tag_snr	= (kal_uint8)CharToInt(cstr, len);
+        			}
+        			else
+        			{
+        				lpgsv->tag_rsv[i*4+j].tag_snr = 0;
+        			}
+        			cstr = nstr + 1;
+                    break;
+        		}
+
+    			len = (kal_uint8)(nstr - cstr);
+    			if(len)
+    			{
+    			    lpgsv->tag_rsv[i*4+j].tag_snr	= (kal_uint8)CharToInt(cstr, len);
+    			}
+    			else
+    			{
+    				lpgsv->tag_rsv[i*4+j].tag_snr = 0;
+    			}
+    			cstr = nstr + 1;
+            }
+#if 0
+            dynamic_debug("tag_msg_sum:%d,tag_msg_index:%d,tag_sates_in_view:%d",tag_msg_sum,tag_msg_index,tag_sates_in_view);
+            dynamic_debug("%hd,%hd,%hd,%hd,%hd,%hd,%hd,%hd,%hd,%hd,%hd,%hd,%hd,%hd,%hd,%hd",
+                lpgsv->tag_rsv[i*4].tag_sate_id,
+                lpgsv->tag_rsv[i*4].tag_elevation,
+                lpgsv->tag_rsv[i*4].tag_azimuth,
+                lpgsv->tag_rsv[i*4].tag_snr,
+                lpgsv->tag_rsv[i*4+1].tag_sate_id,
+                lpgsv->tag_rsv[i*4+1].tag_elevation,
+                lpgsv->tag_rsv[i*4+1].tag_azimuth,
+                lpgsv->tag_rsv[i*4+1].tag_snr,
+                lpgsv->tag_rsv[i*4+2].tag_sate_id,
+                lpgsv->tag_rsv[i*4+2].tag_elevation,
+                lpgsv->tag_rsv[i*4+2].tag_azimuth,
+                lpgsv->tag_rsv[i*4+2].tag_snr,
+                lpgsv->tag_rsv[i*4+3].tag_sate_id,
+                lpgsv->tag_rsv[i*4+3].tag_elevation,
+                lpgsv->tag_rsv[i*4+3].tag_azimuth,
+                lpgsv->tag_rsv[i*4+3].tag_snr);
+#endif
+            pstr = strstr(estr, "GSV,");
+            
+            if(pstr == NULL)
+            {
+                break;
+            }
+            pstr = pstr + 4;
+        }
+    }
+    else
+    {
+        return 0;
+    }
+
+    return 1;
+}
+
+/*****************************************************************************
+ * 函数名
+ *  dynamic_gps_parse_vtg
+ * 描述
+5、 Track Made Good and Ground Speed（VTG）地面速度信息
+$GPVTG,,T,,M,0.015,N,0.029,K,D*29
+$GPVTG,<1>,T,<2>,M,<3>,N,<4>,K,<5>*hh<CR><LF>
+<1> 以真北为参考基准的地面航向（000~359度，前面的0也将被传输）
+<2> 以磁北为参考基准的地面航向（000~359度，前面的0也将被传输）
+<3> 地面速率（000.0~999.9节，前面的0也将被传输）
+<4> 地面速率（0000.0~1851.8公里/小时，前面的0也将被传输）
+<5> 模式指示（仅NMEA0183 3.00版本输出，A=自主定位，D=差分，E=估算，N=数据无效）
+ GPVTG -- VTG Data
+typedef结构
+{
+    浮tag_true_heading; / *跟踪度
+    浮tag_mag_heading; / *磁道度
+    浮tag_hspeed_knot; / *速度节
+    浮tag_hspeed_km; / *速度每小时公里
+    符号字符tag_mode; / *模式
+} uct_gps_nmea_vtg_struct;
+
+ *  void
+ *返回值
+ *  void
+ *****************************************************************************/
+int  dynamic_gps_parse_vtg(uct_gps_nmea_vtg_struct *lpg_vtg, char *str_data, int strlen1)
+{
+    char *pstr = 0;
+    char strtime[10];
+
+    memset(strtime, 0, sizeof(strtime));
+
+    pstr = strstr(str_data, "VTG,");
+    if(lpg_vtg)
+    {
+        if(pstr)
+        {
+            pstr = pstr + 4;
+            sscanf(pstr, "%f,%f,%f,%f,%c", //
+                &lpg_vtg->tag_true_heading,// 1
+                &lpg_vtg->tag_mag_heading,// 2
+                &lpg_vtg->tag_hspeed_knot,// 3
+                &lpg_vtg->tag_hspeed_km,// 4
+                &lpg_vtg->tag_mode);// 5
+        }
+        else
+        {
+            return 0;
+        }
+    }
+    else
+    {
+        return 0;
+    }
+#if 0
+    dynamic_debug("hspeed_knot:%d,hspeed_km:%d",lpg_vtg->tag_hspeed_knot,&lpg_vtg->tag_hspeed_km);
+#endif
+    return 1;
+}
+
+/*****************************************************************************
+ * 函数名
+ *  dynamic_gps_parse_gll
+ * 描述
+6、 Geographic Position（GLL）定位地理信息
+$GPGLL,2236.91218,N,11403.24719,E,060206.00,A,D*66
+$GPGLL,<1>,<2>,<3>,<4>,<5>,<6>,<7>*hh<CR><LF>
+<1> 纬度ddmm.mmmm（度分）格式（前面的0也将被传输）
+<2> 纬度半球N（北半球）或S（南半球）
+<3> 经度dddmm.mmmm（度分）格式（前面的0也将被传输）
+<4> 经度半球E（东经）或W（西经）
+<5> UTC时间，hhmmss（时分秒）格式
+<6> 定位状态，A=有效定位，V=无效定位
+<7> 模式指示（仅NMEA0183 3.00版本输出，A=自主定位，D=差分，E=估算，N=数据无效
+  GPGLL - 地理位置 - 纬度/经度*
+typedef结构
+{
+    双tag_latitude;  纬度
+    双tag_longitude;  经度
+    uct_gps_nmea_utc_time_struct tag_utc_time;   UTC时间
+    符号字符tag_north_south;   N或S
+    符号字符tag_east_west;   E或W
+    符号字符tag_status;  状态A  - 数据有效，V - 数据无效
+    符号字符tag_mode;  模式
+} uct_gps_nmea_gll_struct;
+
+ *  void
+ *返回值
+ *  void
+ *****************************************************************************/
+int  dynamic_gps_parse_gll(uct_gps_nmea_gll_struct *lpggll, char *str_data, int strlen1)
+{
+    char *pstr = 0;
+    short len = 20;
+    char strtime[20];
+
+    memset(strtime, 0, sizeof(strtime));
+    memcpy(strtime, &len, 2);
+    pstr = strstr(str_data, "GLL,");
+    if(lpggll)
+    {
+        if(pstr)
+        {
+            pstr = pstr + 4;
+            sscanf(pstr, "%lf,%c,%lf,%c,%9c,%c,%c", //
+                &lpggll->tag_latitude,// 1
+                &lpggll->tag_north_south,// 2
+                &lpggll->tag_longitude,// 3
+                &lpggll->tag_east_west,
+                strtime,// 5
+                &lpggll->tag_status,// 6
+                &lpggll->tag_mode);// 7
+
+            lpggll->tag_latitude = dynamic_gps_format_latlng(lpggll->tag_latitude);
+            lpggll->tag_longitude = dynamic_gps_format_latlng(lpggll->tag_longitude);
+            return 1;
+        }
+        else
+        {
+            return 0;
+        }
+    }
+    else
+    {
+        return 0;
+    }
+}
+
+
 /*******************************************************************
 ** 函数名:     dynamic_gps_recv_cb
 ** 函数描述:   gps数据接收回调，默认1s更新一次数据
@@ -311,12 +1037,18 @@ void dynamic_gps_recv_cb (kal_uint8* data,kal_uint16 len)
     
     if (s_gps_log)
     {
-        dynamic_log("%s",data);
+        dynamic_log("%s", (char *)data);
     }
 
-    memcpy(&s_gps_data,dynamic_gps_get_info_src(),sizeof(nmea_data_t));
-    memcpy(&s_gps_info,dynamic_gps_get_gps_info(),sizeof(dynamic_gps_info_t));
-    
+    memset(&s_gps_data, 0, sizeof(s_gps_data));
+
+    dynamic_gps_parse_gga(&s_gps_data.tag_gga, (char*)data, len);
+    dynamic_gps_parse_rmc(&s_gps_data.tag_rmc, (char*)data, len);
+    //dynamic_gps_parse_gsa(&s_gps_data.tag_gsa[0], (char*)data, len);
+    dynamic_gps_parse_gsv(&s_gps_data.tag_gsv, (char*)data, len);
+    //dynamic_gps_parse_vtg(&s_gps_data.tag_vtg, (char*)data, len);
+    //dynamic_gps_parse_gll(&s_gps_data.tag_gll, (char*)data, len);
+
     // 更新GPS数据
     if (dynamic_gps_get_pow_state() && s_gps_data.tag_rmc.tag_status == 'A')
     {
@@ -388,7 +1120,6 @@ void dynamic_gps_recv_cb (kal_uint8* data,kal_uint16 len)
         }
         invalid = 0;
         satnum_cnt = 0;
-        
         memset(&s_gps_info,0,sizeof(s_gps_info));
 
         // UTC 时间
@@ -484,7 +1215,6 @@ void dynamic_gps_aid_task(void*str)
     kal_uint32 timevalue = 1000;
     applib_time_struct cur_time;
     dynamic_gps_info_t *gps_info = dynamic_gps_get_info();
-    //DYNAMIC_SYS_T * sys_info = dynamic_sys_get_info();
     
     dynamic_time_get_systime(&cur_time);
 
@@ -508,7 +1238,7 @@ void dynamic_gps_aid_task(void*str)
                 
                 s_aiding_state = ENUM_GPS_EPO_AIDING;
             break;
- #if 0           
+            
             case ENUM_GPS_EPO_AIDING:
             {
                 kal_bool aid_res;
@@ -518,9 +1248,9 @@ void dynamic_gps_aid_task(void*str)
                     dynamic_debug("EPO辅助");
                     aid_res = dynamic_gps_epo_aiding();
                     dynamic_debug("EPO:%d",aid_res);
-                    
+                     
                     s_aiding_state = ENUM_GPS_REFLOC_AIDING;
-                    timevalue = 500;
+                    timevalue = 1000;
                 }
                 else
                 {
@@ -535,19 +1265,21 @@ void dynamic_gps_aid_task(void*str)
                 }
             }
             break;
-#endif
+
             case ENUM_GPS_REFLOC_AIDING:
-			#if 0
-                sys_info->end_gps.lat = 22.56602;
-                sys_info->end_gps.lng = 113.94841;
+            {
+			    DYNAMIC_SYS_T * sys_info = dynamic_sys_get_info();
+
+                //sys_info->end_gps.lat = 22.56602;
+                //sys_info->end_gps.lng = 113.94841;
                 if (sys_info->end_gps.lat != 0.0 && sys_info->end_gps.lng != 0.0)
                 {
                     dynamic_debug("位置辅助");
                     dynamic_gps_refloc_aid(sys_info->end_gps.lat,sys_info->end_gps.lng,sys_info->end_gps.altitude);
                 }
-			#endif
                 s_aiding_state = ENUM_GPS_AIDING_INIT;
                 return;
+            }
             break;
 
             default:
@@ -586,8 +1318,8 @@ void dynamic_gps_pow_ctrl(kal_uint8 onoff)
             s_aiding_state = ENUM_GPS_AIDING_INIT;
             dynamic_timer_start(enum_timer_gps_aid_timer,1*1000,(void*)dynamic_gps_aid_task,NULL,FALSE);
         }
-        dynamic_gps_pow_crl(1);
         dynamic_sleep_disable();
+        dynamic_gps_pow_crl(1);
     }
     else
     {
@@ -659,30 +1391,6 @@ void dynamic_gps_task(void *str)
 }
 
 /*******************************************************************
-** 函数名:     dynamic_gps_pow_init
-** 函数描述:   
-** 参数:       
-** 返回:       
-********************************************************************/
-void dynamic_gps_pow_init(void)
-{
-#ifdef __XY_SUPPORT__
-    XY_INFO_T * xy_info = xy_get_info();
-    
-    if (xy_info->mode == XY_TRACK_MODE1)
-    {
-        dynamic_gps_pow_ctrl(1);
-    }
-    else
-    {
-        dynamic_gps_pow_ctrl(0);
-    }
-#else
-    dynamic_gps_pow_ctrl(0);
-#endif
-}
-
-/*******************************************************************
 ** 函数名:     dynamic_gps_init
 ** 函数描述:   
 ** 参数:       
@@ -706,10 +1414,10 @@ void dynamic_gps_init(void)
         {
             dynamic_debug("reset end gps data:%d,%d",curtime_sec,gpstime_sec);
             memset(&sys_info->end_gps,0,sizeof(sys_info->end_gps));
+			sys_info->end_gps.d_lat = 'N';
+			sys_info->end_gps.d_lng = 'E';
             dynamic_sys_info_save();
         }
     }
-
-    dynamic_gps_pow_init();
 }
 

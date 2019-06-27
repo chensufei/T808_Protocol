@@ -51,7 +51,7 @@ void xy_led_task(void*str)
 
     if (dynamic_gps_get_pow_state() == 1)
     {
-        if (dynamic_gps_is_fix() == 1)
+        if (dynamic_gps_is_fix() == 0)
         {
             gps_led = 1;
         }

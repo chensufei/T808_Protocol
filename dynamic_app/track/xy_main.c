@@ -161,10 +161,13 @@ void xy_t808_param_reset(void)
 	xy_info.t808_para.report_type = 0;			/* 位置汇报策略,位置信息上报方式，0：定时汇报；1：定距汇报；2：定时和定距汇报 */
 	xy_info.t808_para.report_way = 0;			/* 位置汇报方案, 0：根据 ACC 状态； 1：根据登录状态和 ACC 状态，先判断登录状态，若登录再根据 ACC 状态 */
 
+	xy_info.t808_para.sleep_freq = 3600;
 	xy_info.t808_para.sos_freq = 5;				/* 紧急报警时间，默认是5s */
 	xy_info.t808_para.def_distance = 300;		/* 缺省距离汇报间隔,默认是300m */
 	xy_info.t808_para.sos_distance = 50;		/* 紧急距离汇报间隔,默认是50m */
 	xy_info.t808_para.degree = 7;				/* 拐点补传角度, <180° */
+	xy_info.t808_para.degree_switch =1;         /* 拐点补传开关, 默认开启 */
+	xy_info.t808_para.degree_freq = 5;
 	xy_info.t808_para.fencing_radius = 300;		/* 电子围栏半径（非法位移阈值），单位为米，默认300m */
 
 	memset(xy_info.t808_para.txt_number, 0, sizeof(xy_info.t808_para.txt_number));		/* 文本号码，接收短信/报警 */
@@ -197,7 +200,7 @@ void xy_t808_param_reset(void)
 ********************************************************************/
 kal_uint8 xy_info_reset(void)
 {
-    //APP_CNTX_T * app_cntx = dynamic_app_cntx_get();
+    APP_CNTX_T * app_cntx = dynamic_app_cntx_get();
     kal_uint8 server[XY_URL_LEN];
     kal_uint16 port = 0;
     kal_uint8 user[MAX_PHONE_NUM_LEN+1];
@@ -220,14 +223,21 @@ kal_uint8 xy_info_reset(void)
     memset(user,0,sizeof(user));
     memcpy(user,xy_info.user,strlen((char*)xy_info.user));
     
-    memset(dev_num,0,sizeof(dev_num));
-    memcpy(dev_num,xy_info.dev_num,strlen((char*)xy_info.dev_num));
+    memset(dev_num, 0, sizeof(dev_num));
+    memcpy(dev_num, xy_info.dev_num,strlen((char*)xy_info.dev_num));
 	
     memset(&xy_info,0,sizeof(xy_info));
     memcpy(xy_info.server,server,strlen((char*)server));
     xy_info.port = port;
-    
-    memcpy(xy_info.dev_num,dev_num,strlen((char*)dev_num));
+
+	if (strlen((char *)dev_num) > 0)
+	{
+    	memcpy(xy_info.dev_num, dev_num, strlen((char*)dev_num));
+	}
+	else
+	{
+		memcpy(xy_info.dev_num, &app_cntx->imei[4], DEV_PHONE_NUM_DEFAULT_LEN);
+	}
     memcpy(xy_info.user,user,strlen((char*)user));
     
     memcpy(xy_info.psw,XY_DEFAULT_CRL_PSW,strlen(XY_DEFAULT_CRL_PSW));
@@ -256,6 +266,10 @@ kal_uint8 xy_info_reset(void)
     
     xy_info.vibsensity = DYNAMIC_DEFAULT_VIBSENSITY; // 震动灵敏度 越大越灵敏
 
+    xy_info.tzone = 8; 
+    xy_info.acc_check_mode = 0;
+	xy_info.acc_check_switch = 1;
+	xy_info.lockmode = 1;
 	xy_t808_param_reset();
 	
     xy_info_save();
@@ -283,6 +297,7 @@ void xy_main_init(void)
     dynamic_debug("xy_main_init");
     memset(&xy_info,0,sizeof(xy_info));
     len = dynamic_file_read(XY_INFO_FILE_NAME,&xy_info,sizeof(xy_info));
+    dynamic_debug("xy_info:%d,%s",len,xy_info.server);
     checksum = dynamic_checksum((kal_uint8 *)&xy_info, (sizeof(XY_INFO_T)-4));
     if (len != sizeof(xy_info) || checksum != xy_info.checksum)
     {
@@ -307,9 +322,10 @@ void xy_main_init(void)
     {
         xy_info.reset_cnt = 0;
     }
-    if (strlen((char*)xy_info.dev_num) == 0 || strncmp((char*)xy_info.dev_num,"FFFFFFFFFFFF",DEV_PHONE_NUM_DEFAULT_LEN) || strncmp((char*)xy_info.dev_num,"ffffffffffff",DEV_PHONE_NUM_DEFAULT_LEN))
+    if (0 == strlen((char*)xy_info.dev_num))
     {
-        memcpy(xy_info.dev_num,&app_cntx->imei[4], DEV_PHONE_NUM_DEFAULT_LEN);
+    	memset(xy_info.dev_num, 0, sizeof(xy_info.dev_num));
+        memcpy(xy_info.dev_num, &app_cntx->imei[4], DEV_PHONE_NUM_DEFAULT_LEN);
     }
 #ifdef __XY_MILEAGE_SUPPORT__
     xy_mil_init(xy_info.mileage);

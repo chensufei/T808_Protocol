@@ -289,10 +289,17 @@ void xy_acc_check(void)
     static kal_uint8 accon = 0;
     static kal_uint8 accoff =0;
     XY_INFO_T * xy_info = xy_get_info();
-	char accSta = GPIO_ReadIO(XY_ACC_CHECK_PORT);
-
-	dynamic_log("11111acc state:%d\r\n", accSta);
-    if (0 == accSta)
+  if(xy_info->acc_check_switch == 0) //acc 检测关闭acc状态为0
+  {
+	 dynamic_debug("acc_check_switch Off!");
+	 xy_info->acc_state = XY_ACC_OFF;
+    
+  }
+  else
+  {
+    if(xy_info->acc_check_mode ==0)//acc 检测打开 acc为接线模式
+    {
+    if (GPIO_ReadIO(XY_ACC_CHECK_PORT) == 0)
     {
         accoff = 0;
         if (++accon >= XY_ACC_CHECK_CNT)
@@ -343,6 +350,9 @@ void xy_acc_check(void)
         }
     }
 }
+   }
+
+ }
 
 /*******************************************************************
 ** 函数名:     xy_alm_pow_init
@@ -354,8 +364,22 @@ void xy_alm_pow_init(void)
 {
     GPIO_ModeSetup(XY_BREAK_CHECK_PORT,0);   
     GPIO_InitIO(INPUT,XY_BREAK_CHECK_PORT);
-    GPIO_PullenSetup(XY_BREAK_CHECK_PORT,1);
-    GPIO_PullSelSetup(XY_BREAK_CHECK_PORT,1);
+    //GPIO_PullenSetup(XY_BREAK_CHECK_PORT,1);
+    //GPIO_PullSelSetup(XY_BREAK_CHECK_PORT,1);
+}
+
+/* 外电电压 */
+static kal_uint32 s_powerVoltage = 0;
+
+/*******************************************************************
+** 函数名:     xy_get_power_vol
+** 函数描述:   
+** 参数:       
+** 返回:       
+********************************************************************/
+kal_uint32 xy_get_power_vol(void)
+{
+	return s_powerVoltage;
 }
 
 /*******************************************************************
@@ -371,12 +395,12 @@ void xy_alm_pow_check(void)
     static kal_uint32 adc_sum = 0;
     static kal_uint32 adc_cnt = 0;
     XY_INFO_T * xy_info = xy_get_info();
-    kal_uint32 voltage;
     
-    dynamic_adc_get_channel_voltage(DCL_PCBTMP_ADC_CHANNEL,&voltage);
+    
+    dynamic_adc_get_channel_voltage(DCL_PCBTMP_ADC_CHANNEL, &s_powerVoltage);
 
-    dynamic_debug("voltage:%d",voltage);
-    if ((GPIO_ReadIO(XY_BREAK_CHECK_PORT) != 0 ) || (voltage < 10000))
+    //dynamic_debug("power Voltage:%d",s_powerVoltage);
+    if ((GPIO_ReadIO(XY_BREAK_CHECK_PORT) != 0 ) || (s_powerVoltage < 100000))
     {
         con_cnt = 0;
         if (++break_cnt >= XY_BREAK_CHECK_CNT)
@@ -411,25 +435,25 @@ void xy_alm_pow_check(void)
 
         if (xy_info->break_state == XY_POW_CONNECT_STATE)
         {            
-            //dynamic_adc_get_channel_voltage(DCL_PCBTMP_ADC_CHANNEL,&voltage);
-            if (voltage > 100000)
+            //dynamic_adc_get_channel_voltage(DCL_PCBTMP_ADC_CHANNEL,&s_powerVoltage);
+            if (s_powerVoltage > 100000)
             {
-                adc_sum += voltage;
+                adc_sum += s_powerVoltage;
                 if (++adc_cnt >= XY_BAT_ADC_CNT)
                 {
                     kal_uint32 vinoff = xy_info->vinoff * 1000;
                     kal_uint32 vinon = xy_info->vinon * 1000;
                     
                     adc_cnt = 0;
-                    voltage = adc_sum/XY_BAT_ADC_CNT;
+                    s_powerVoltage = adc_sum/XY_BAT_ADC_CNT;
                     adc_sum = 0;
-                    voltage = (double)voltage*37.451;
-                    voltage = voltage/1000;
-                    voltage = voltage*1.01725;
+                    s_powerVoltage = (double)s_powerVoltage*37.451;
+                    s_powerVoltage = s_powerVoltage/1000;
+                    s_powerVoltage = s_powerVoltage*1.01725;
 
-                    dynamic_debug("pow voltage:%dmv,vinoff:%d,vinon:%d",voltage,vinoff,vinon);
-                    s_vin = voltage;
-                    if (voltage < vinoff)
+                    dynamic_debug("pow voltage:%dmv,vinoff:%d,vinon:%d",s_powerVoltage,vinoff,vinon);
+                    s_vin = s_powerVoltage;
+                    if (s_powerVoltage < vinoff)
                     {
                         if (xy_info->vin_alm == 0)
                         {
@@ -437,7 +461,7 @@ void xy_alm_pow_check(void)
                             xy_info_save();
                         }
                     }
-                    else if (voltage > vinon)
+                    else if (s_powerVoltage > vinon)
                     {
                         if (xy_info->vin_alm == 1)
                         {
@@ -466,6 +490,21 @@ void xy_realy_init(void)
     GPIO_WriteIO(xy_info->realy_crl,XY_REALY_CRL_PORT);
 }
 
+
+/* 电池电压 */
+static kal_uint32 s_BatteryVoltage = 0;
+
+/*******************************************************************
+** 函数名:     xy_get_battery_vol
+** 函数描述:   
+** 参数:       
+** 返回:       
+********************************************************************/
+kal_uint32 xy_get_battery_vol(void)
+{
+	return s_BatteryVoltage;
+}
+
 /*******************************************************************
 ** 函数名:     xy_alm_low_bat
 ** 函数描述:   
@@ -478,11 +517,10 @@ void xy_alm_low_bat(void)
     static kal_uint32 v_buf = 0;
     static kal_uint32 adc_value[XY_BAT_ADC_CNT];
     static kal_uint32 adc_cnt = 0;
-    kal_uint32 voltage = 0;
     kal_uint32 i,j,temp;
     
-    dynamic_adc_get_channel_voltage(DCL_VBAT_ADC_CHANNEL,&voltage);
-    adc_value[adc_cnt] = voltage;
+    dynamic_adc_get_channel_voltage(DCL_VBAT_ADC_CHANNEL,&s_BatteryVoltage);
+    adc_value[adc_cnt] = s_BatteryVoltage;
     if (++adc_cnt >= XY_BAT_ADC_CNT)
     {
         adc_cnt = 0;
@@ -498,19 +536,19 @@ void xy_alm_low_bat(void)
                 }
             }
         }
-        voltage = adc_value[XY_BAT_ADC_CNT/2];
+        s_BatteryVoltage = adc_value[XY_BAT_ADC_CNT/2];
         if (xy_info->break_state == XY_POW_CONNECT_STATE)
         {
-            if (voltage > v_buf)
+            if (s_BatteryVoltage > v_buf)
             {
-                xy_info->bat_value = voltage;
+                xy_info->bat_value = s_BatteryVoltage;
             }
         }
         else
         {
-            if (v_buf > voltage)
+            if (v_buf > s_BatteryVoltage)
             {
-                xy_info->bat_value = voltage;
+                xy_info->bat_value = s_BatteryVoltage;
             }
         }
         dynamic_debug("cur bat value:%duv,break_state:%d",xy_info->bat_value,xy_info->break_state);
@@ -518,7 +556,7 @@ void xy_alm_low_bat(void)
   
     if (xy_info->bat_value == 0 || v_buf == 0)
     {
-        xy_info->bat_value = voltage;
+        xy_info->bat_value = s_BatteryVoltage;
     }
     v_buf = xy_info->bat_value;
 
@@ -759,7 +797,7 @@ void xy_alm_init(void)
     xy_realy_init();
     xy_alm_move_init();
 	//dynamic_key_set_cb((void*)xy_key_cb); // sos硬件上不使用键盘口，应该使用中断或普通GPIO实现
-    dynamic_timer_start(enum_timer_alm_task_timer,5*1000,(void*)xy_alm_task,NULL,FALSE);
+    dynamic_timer_start(enum_timer_alm_task_timer, 2*1000,(void*)xy_alm_task,NULL,FALSE);
 }
 
 #endif

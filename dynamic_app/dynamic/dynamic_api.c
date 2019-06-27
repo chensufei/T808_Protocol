@@ -177,8 +177,6 @@ DYNAMIC_API_ENTRY(dynamic_gps_refloc_aid);
 DYNAMIC_API_ENTRY(dynamic_gps_epo_req);
 DYNAMIC_API_ENTRY(dynamic_epo_is_valid);
 DYNAMIC_API_ENTRY(dynamic_gps_epo_aiding);
-DYNAMIC_API_ENTRY(dynamic_gps_get_gps_info);
-DYNAMIC_API_ENTRY(dynamic_gps_get_info_src);
 
 static void dynamic_load_general_apis(void)
 {
@@ -355,8 +353,6 @@ static void dynamic_load_general_apis(void)
     DYNAMIC_LOAD_API(dynamic_gps_epo_req);    
     DYNAMIC_LOAD_API(dynamic_epo_is_valid);    
     DYNAMIC_LOAD_API(dynamic_gps_epo_aiding);
-    DYNAMIC_LOAD_API(dynamic_gps_get_gps_info);
-    DYNAMIC_LOAD_API(dynamic_gps_get_info_src);
     
 }
 

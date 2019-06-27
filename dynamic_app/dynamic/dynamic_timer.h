@@ -25,8 +25,10 @@ typedef enum enum_timer_
     enum_timer_start_reset_later,
     enum_timer_sms_timer,
     enum_timer_gps_aid_timer,
+    enum_timer_write_epo_overtime_timer,
     enum_timer_gps_timer,
     enum_timer_sensor_task_timer,
+    enum_timer_http_task_timer,
     enum_timer_http_continue_timer,
     enum_timer_vib_delay_timer,
     enum_timer_watchdog_task_timer,
@@ -52,6 +54,13 @@ typedef enum enum_timer_
 }enum_timer; // dynamic_timer_start使用
 
 
+/*******************************************************************
+** 函数: dynamic_time_get_local_time
+** 描述: 获取本地时间
+** 参数:       
+** 返回: 
+********************************************************************/
+void dynamic_time_get_local_time(applib_time_struct *nowTime);
 
 #endif
 

@@ -14,6 +14,8 @@
 #include "dynamic_init.h"
 
 
+#define T808_PROTOCOL_MSG_HEAD_LEN 12
+
 /* 终端应答类型 */
 typedef enum _T808LoginAckTypeE
 {
@@ -110,7 +112,6 @@ typedef struct _xy_t808_data_info
 	u16 serialNo;						/* 序列号 */
 	u8 ctrl_cmd_type;					/* 平台下发控制指令类型, 3-关机，4-复位重启，5-恢复出厂设置 */
 } xy_t808_data_info;
-
 
 /*******************************************************************
 ** 全局变量
@@ -251,34 +252,52 @@ static kal_uint16 xy_data_pack_position(kal_uint8 * dtr)
 	kal_uint16 len = 0;
 	struct XY_POS_INFO_T pos;
 	applib_time_struct time;
+	XY_INFO_T * xy_info = xy_get_info();
+	DYNAMIC_SYS_T *sys = dynamic_sys_get_info();
 	nmea_data_t *gps_info = dynamic_gps_get_nmea();
 
 	memset((void *)&pos, 0, sizeof(pos));
 	pos.alarmFlag.val = 0;
 
-	if (gps_info->tag_rmc.tag_status)
-	pos.status.bitSt.gpsValid = (TRUE != dynamic_gps_is_fix()) ? 0 : 1;
+	pos.status.bitSt.acc = (0 != xy_info->acc_state) ? 1 : 0;
 
-	pos.lat = (u32)(gps_info->tag_rmc.tag_latitude * 1000000);
-	pos.lon = (u32)(gps_info->tag_rmc.tag_longitude * 1000000);
+	if (dynamic_gps_is_fix())
+	{
+		pos.status.bitSt.gpsValid = 1;
 
-	/* 0：北纬；1：南纬 */
-	pos.status.bitSt.latSta = ('N' == gps_info->tag_rmc.tag_north_south) ? 0 : 1;
+		pos.lat = (u32)(gps_info->tag_rmc.tag_latitude * 1000000);
+		pos.lon = (u32)(gps_info->tag_rmc.tag_longitude * 1000000);
 
-	/* 0：东经；1：西经 */
-	pos.status.bitSt.lonSta = ('E' == gps_info->tag_rmc.tag_east_west) ? 0 : 1;
+		/* 0：北纬；1：南纬 */
+		pos.status.bitSt.latSta = ('N' == gps_info->tag_rmc.tag_north_south) ? 0 : 1;
+
+		/* 0：东经；1：西经 */
+		pos.status.bitSt.lonSta = ('E' == gps_info->tag_rmc.tag_east_west) ? 0 : 1;
+
+		pos.high = (u16)(gps_info->tag_gga.tag_altitude);
+		pos.speed = (u16)(gps_info->tag_rmc.tag_ground_speed * 1.852 * 10);
+		pos.dir = (u16)gps_info->tag_rmc.tag_trace_degree;
+	}
+	else
+	{
+		pos.status.bitSt.gpsValid = 0;
+		pos.lat = (u32)(sys->end_gps.lat * 1000000);
+		pos.lon = (u32)(sys->end_gps.lng * 1000000);
+
+		/* 0：北纬；1：南纬 */
+		pos.status.bitSt.latSta = ('N' == sys->end_gps.d_lat) ? 0 : 1;
+
+		/* 0：东经；1：西经 */
+		pos.status.bitSt.lonSta = ('E' == sys->end_gps.d_lng) ? 0 : 1;
+	}
 
 	pos.status.bitSt.gpsLoc = 1;
 	pos.status.bitSt.bdLoc = 1;
 
-	pos.high = (u16)(gps_info->tag_gga.tag_altitude);
-	pos.speed = (u16)(gps_info->tag_rmc.tag_ground_speed * 1.852 * 10);
-	pos.dir = (u16)gps_info->tag_rmc.tag_trace_degree;
-
 	memset(&time, 0, sizeof(time));
-	dynamic_time_get_systime(&time);
+	dynamic_time_get_local_time(&time);
 
-	dynamic_log("time:%d/%d/%d %d:%d:%d", time.nYear, time.nMonth, time.nDay,
+	dynamic_debug("time:%d/%d/%d %d:%d:%d", time.nYear, time.nMonth, time.nDay,
 		time.nHour, time.nMin, time.nSec);
 	
 	pos.time[0] = dynamic_dec_to_bcd(time.nYear % 100);
@@ -651,11 +670,15 @@ static void xy_data_pack_set_one_param_info(u32 paramId, u8 len, void *data)
     T808_PARA_T *t808_para = &xy_info->t808_para;
 	kal_uint8 set_server = 0;
 
+	dynamic_debug("xy_data_pack_set_one_param_info, param ID:%x, len:%d\r\n", paramId, len);
+	dynamic_log_hex((kal_uint8 *)data, len); 
+
 	switch(paramId)
 	{
 		case 0x0001:/* 心跳 */
 		{
 			memcpy((void *)&xy_info->heart_time, data, len);
+			dynamic_debug("heart time:%d\r\n", xy_info->heart_time);
 		}
 		break;
 		case 0x0002:/* TCP应答超时时间 */
@@ -706,16 +729,28 @@ static void xy_data_pack_set_one_param_info(u32 paramId, u8 len, void *data)
 			xy_info->t808_para.report_way = (u8)(dword & 0xff);
 		}
 		break;
+		case 0x0027:/* 休眠时汇报时间间隔 */
+		{
+			memcpy((void *)&dword, data, len);
+			xy_info->t808_para.sleep_freq = dword;
+
+			dynamic_debug("sleep_freq:%d\r\n", xy_info->t808_para.sleep_freq);
+		}
+		break;
 		case 0x0028:/* 紧急报警时汇报时间间隔 */
 		{
 			memcpy((void *)&dword, data, len);
 			xy_info->t808_para.sos_freq = dword;
+
+			dynamic_debug("sos_freq:%d\r\n", xy_info->t808_para.sos_freq);
 		}
 		break;
 		case 0x0029:/* 缺省时间汇报间隔 */
 		{
 			memcpy((void *)&dword, data, len);
 			xy_info->freq = dword;
+
+			dynamic_debug("default_freq:%d\r\n", xy_info->freq);
 		}
 		break;
 		case 0x002C:/* 缺省距离汇报间隔,单位为米（m），>0 */
@@ -991,7 +1026,7 @@ kal_uint8 xy_soc_data_pack(T808_PROTOCOL_MSGID_E cmd,XY_SOC_SEND_TYPE_E inset_li
     // 终端手机号
     {
     
-        kal_uint8 dev_num[DEV_PHONE_NUM_DEFAULT_LEN + 1] = {0};
+        kal_uint8 dev_num[MAX_PHONE_NUM_LEN + 1] = {0};
         kal_uint8 numlen = 0;
 
 		memset(dev_num, '0', sizeof(dev_num));
@@ -1145,7 +1180,7 @@ kal_uint8 xy_soc_data_pack(T808_PROTOCOL_MSGID_E cmd,XY_SOC_SEND_TYPE_E inset_li
     }
     else
     {
-        if (xy_soc_data_send((char*)datastr,curlen) == 0)
+        if (xy_soc_send((char*)datastr,curlen) == 0)
         {
             result = KAL_FALSE;
         }
@@ -1291,23 +1326,23 @@ void xy_soc_data_deal(kal_uint8*data,kal_uint32 len)
 {
     kal_uint16 cmd = 0;
     kal_uint16 serialnum = 0;
-    kal_uint8 *info = &data[DEV_PHONE_NUM_DEFAULT_LEN + 1]; // 消息体
+    kal_uint8 *info = &data[T808_PROTOCOL_MSG_HEAD_LEN]; // 消息体
     kal_int8 ask_result;
     XY_INFO_T * xy_info = xy_get_info();
     T808_PARA_T *t808_para = &xy_info->t808_para;
     
-    if (len < DEV_PHONE_NUM_DEFAULT_LEN)
+    if (len < T808_PROTOCOL_MSG_HEAD_LEN)
     {
         dynamic_debug("xy_soc_data_deal error data len:%d", len);
         return;
     }
 
     cmd = dynamic_big_endian_pack_short(&data[0]);
-    serialnum = dynamic_big_endian_pack_short(&data[DEV_PHONE_NUM_DEFAULT_LEN-1]);
+    serialnum = dynamic_big_endian_pack_short(&data[T808_PROTOCOL_MSG_HEAD_LEN-2]);
     
     dynamic_debug("xy_soc_data_deal cmd:0x%04x,serialnum:0x%04x",cmd,serialnum);
     dynamic_log_hex(data,len);  
-    
+    xy_soc_heart_reset();
     switch (cmd)
     {        
         case T808_MSGID_S_GENERAL_ACK:		/* 平台的通用应答 */
@@ -1329,12 +1364,14 @@ void xy_soc_data_deal(kal_uint8*data,kal_uint32 len)
 					{
 						xy_soc_set_auth_ok_state(1);
 						xy_soc_set_ack_fail_cnt(0);
-						dynamic_timer_start(enum_timer_soc_task_timer, 300, (void*)xy_soc_task,NULL,FALSE);
 					}
 					else
 					{
 						xy_soc_set_ack_fail_cnt(++cnt);
 					}
+
+					dynamic_timer_stop(enum_timer_soc_task_timer);
+					dynamic_timer_start(enum_timer_soc_task_timer, 1000, (void*)xy_soc_task,NULL,FALSE);
                 }
                 break;
 				case T808_MSGID_C_HEART:
@@ -1354,7 +1391,7 @@ void xy_soc_data_deal(kal_uint8*data,kal_uint32 len)
 					{
 						//从队列中删除已成功发送的数据
 						xy_soc_clear_data_flag();
-						 dynamic_timer_start(enum_timer_soc_task_timer, 100,(void*)xy_soc_task,NULL,FALSE);
+						dynamic_timer_start(enum_timer_soc_task_timer, 100,(void*)xy_soc_task,NULL,FALSE);
 					}
 				}
 				break;
@@ -1370,25 +1407,31 @@ void xy_soc_data_deal(kal_uint8*data,kal_uint32 len)
 			kal_uint8 cnt = xy_soc_get_ack_fail_cnt();
 
 			ask_result = info[2];
-            if (len > (DEV_PHONE_NUM_DEFAULT_LEN + 5) && (len - (DEV_PHONE_NUM_DEFAULT_LEN+5)) <= T808_AUTH_CODE_LEN)
+            if (len > (T808_PROTOCOL_MSG_HEAD_LEN + 4) && (len - (T808_PROTOCOL_MSG_HEAD_LEN+4)) <= T808_AUTH_CODE_LEN)
             {
             	if (!ask_result)
             	{
             		xy_soc_set_ack_fail_cnt(0);
                 	memset(t808_para->auth_code, 0, sizeof(t808_para->auth_code));
-					t808_para->auth_code_len = (len - DEV_PHONE_NUM_DEFAULT_LEN - 5);
+					t808_para->auth_code_len = (len - T808_PROTOCOL_MSG_HEAD_LEN - 4);
                 	memcpy(t808_para->auth_code, &info[3], t808_para->auth_code_len);
 					xy_soc_set_ack_fail_cnt(0);
 					xy_soc_set_reg_ok_state(1);
 
 					dynamic_debug("终端注册应答:%d,auth_code:%s", ask_result, t808_para->auth_code);
 					dynamic_log_hex(t808_para->auth_code, t808_para->auth_code_len);
-
-					dynamic_timer_start(enum_timer_soc_task_timer, 100,(void*)xy_soc_task,NULL,FALSE);
-					break;
 				}
+				else
+				{
+					xy_soc_set_ack_fail_cnt(++cnt);
+				}
+				dynamic_timer_stop(enum_timer_soc_task_timer);
+				dynamic_timer_start(enum_timer_soc_task_timer, 1000, (void*)xy_soc_task,NULL,FALSE);
             }
-			xy_soc_set_ack_fail_cnt(++cnt);
+			else
+			{
+				xy_soc_set_ack_fail_cnt(++cnt);
+			}
 		}
         break;
         
@@ -1412,12 +1455,13 @@ void xy_soc_data_deal(kal_uint8*data,kal_uint32 len)
 
 				if (sizeof(u16) == paramlen)
 				{
-					word = dynamic_big_endian_pack_short(&info[pos]);
+					word = (u16)((u16)info[pos] << 8) | (u16)info[pos + 1];
 					xy_data_pack_set_one_param_info(paramId, paramlen, (void *)&word);
 				}
 				else if (sizeof(u32) == paramlen)
 				{
-					dword = dynamic_big_endian_pack_short(&info[pos]);
+					dword = (u32)((u32)info[pos] << 24) | (u32)((u32)info[pos + 1] << 16)
+						       | (u32)((u32)info[pos + 2] << 8) | (u32)info[pos + 3];
 					xy_data_pack_set_one_param_info(paramId, paramlen, (void *)&dword);
 				}
 				else
@@ -1430,98 +1474,6 @@ void xy_soc_data_deal(kal_uint8*data,kal_uint32 len)
 
 			xy_soc_ask_up(cmd, serialnum, 0);
 		}
-#if 0
-        {
-            kal_uint8 para_cnt = 0;
-            kal_uint8 i;
-            kal_uint8 paralen = 0;
-            kal_uint16 para_type;
-            kal_uint16 pos = 0;
-            kal_uint8 set_server = 0;
-            
-            para_cnt = info[pos++];
-            dynamic_debug("设置终端参数 para_cnt:%d",para_cnt);
-            for(i=0;i<para_cnt;i++)
-            {
-                para_type = dynamic_big_endian_pack_short(&data[pos]);
-                pos += 2;
-                paralen = data[pos++];
-				
-                switch (para_type)
-                {
-                    case 0x0001: // 心跳发送间隔
-                    {
-                        kal_uint32 heart_time;
-                        
-                        heart_time = dynamic_big_endian_pack_int(&data[pos]);
-                        dynamic_debug("心跳发送间隔:%d",heart_time);
-                        xy_info->heart_time = heart_time;
-                        xy_info_save();
-                    }
-                    break;
-
-                    case 0x0013: // 服务器地址
-                    {
-                        kal_uint8 server[XY_URL_LEN+1];
-
-                        if (paralen >= 7 && paralen <= XY_URL_LEN)
-                        {
-                            memset(server,0,sizeof(server));
-                            memcpy(server,&data[pos],paralen);
-                            memset(xy_info->server,0,sizeof(xy_info->server));
-                            memcpy(xy_info->server,server,paralen);
-                            xy_info_save();
-                            set_server = 1;
-                        }
-                        dynamic_debug("设置服务器:%d,%s",paralen,server);                   
-                    }
-                    break;
-
-                    case 0x0029: // 终端位置上报间隔
-                    {
-                        kal_uint32 track_sports;
-                        
-                        track_sports = dynamic_big_endian_pack_int(&data[pos]);
-                        dynamic_debug("位置上报间隔:%d",track_sports);
-                        xy_info->freq = track_sports;
-                        xy_info_save();
-                    }
-                    break;
-
-                    case 0x0018: // TCP端口
-                    {
-                        kal_uint16 port;
-                        
-                        port = dynamic_big_endian_pack_short(&data[pos]);
-                        dynamic_debug("TCP端口:%d",port);
-                        xy_info->port = port;
-                        xy_info_save();
-                        set_server = 1;
-                    }
-                    break;
-
-                    case 0x0019: // UDP端口
-                    {
-                        // 暂时不加UDP
-
-                    }
-                    break;
-
-                    default:
-
-                    break;
-                    
-    
-                }
-                pos += paralen;
-            }
-            xy_soc_ask_up(cmd,serialnum,0);
-            if (set_server == 1)
-            {
-                dynamic_timer_start(enum_timer_xy_soc_close_timer,5*1000,(void*)xy_soc_close_delay,NULL,FALSE); 
-            }
-		}
-#endif
         break;
         
         case T808_MSGID_S_QUERY_PARAM:		/* 平台查询参数 */
@@ -1532,13 +1484,29 @@ void xy_soc_data_deal(kal_uint8*data,kal_uint32 len)
 			param.msgid = T808_MSGID_S_QUERY_PARAM;
 			param.serial = serialnum;
 			param.sum = 0;
-			xy_soc_data_pack(T808_MSGID_S_QUERY_PARAM, 0, (u8 *)&param);
+			xy_soc_data_pack(T808_MSGID_C_PARAM_ACK, 0, (u8 *)&param);
         }
         break;
         
         case T808_MSGID_S_CTRL_CMD:		    /* 平台控制指令 */
 		{
 			s_xy_t808_data.ctrl_cmd_type = info[0];
+			if (0x64 == s_xy_t808_data.ctrl_cmd_type)
+			{
+				dynamic_debug("断开油路");
+			}
+			else if (0x65 == s_xy_t808_data.ctrl_cmd_type)
+			{
+				dynamic_debug("恢复油路");
+			}
+			else if (0x04 == s_xy_t808_data.ctrl_cmd_type)
+			{
+				dynamic_debug("重启设备");
+			}
+			else if (0x05 == s_xy_t808_data.ctrl_cmd_type)
+			{
+				dynamic_debug("恢复出厂设置");
+			}
 
 			xy_soc_ask_up(T808_MSGID_S_CTRL_CMD, serialnum, 0);
 		}
@@ -1565,7 +1533,7 @@ void xy_soc_data_deal(kal_uint8*data,kal_uint32 len)
 					                 | (u32)info[3 + 4 * i] << 8 | (u32)info[4 + 4 * i];
 			}
 
-			xy_soc_data_pack(T808_MSGID_S_QUERY_SPE_PARAM, 0, (u8 *)&param);
+			xy_soc_data_pack(T808_MSGID_C_PARAM_ACK, 0, (u8 *)&param);
 
 			dynamic_free(param.paramId);
 			param.paramId = 0;
@@ -1592,7 +1560,7 @@ void xy_soc_data_deal(kal_uint8*data,kal_uint32 len)
 			t808_para->tracking_cylce = ((u16)info[0] << 8) | (u16)info[1];
 			t808_para->tracking_time_sec = ((u32)info[2] << 24) | ((u32)info[3] << 16) | ((u32)info[4] << 8) | (u32)info[5];
 
-			dynamic_log("临时位置跟踪的信息:cycle-%d, sec-%d", t808_para->tracking_cylce,
+			dynamic_debug("临时位置跟踪的信息:cycle-%d, sec-%d", t808_para->tracking_cylce,
 				t808_para->tracking_time_sec);
 
 			xy_soc_ask_up(T808_MSGID_S_TEMP_POS_TRACKING, serialnum, 0);
@@ -1604,6 +1572,8 @@ void xy_soc_data_deal(kal_uint8*data,kal_uint32 len)
 			//针对需要人工确认的报警
 			//kal_uint16 recv_serial = ((u16)info[0] << 8) | (u16)info[1];
 			kal_uint32 comfirm_alarm = ((u32)info[2] << 24) | ((u32)info[3] << 16) | ((u32)info[4] << 8) | (u32)info[5];
+
+			dynamic_debug("confirm alarm:%x\r\n", comfirm_alarm);
 
 			if (M_GET_BIT(comfirm_alarm, 0))
 			{
@@ -1641,7 +1611,25 @@ void xy_soc_data_deal(kal_uint8*data,kal_uint32 len)
         
         case T808_MSGID_S_SEND_TEXT:	/* 文本信息下发 */
 		{
-			
+			int datalen = len - T808_PROTOCOL_MSG_HEAD_LEN - 2;
+			char *serverStr = NULL;
+
+			dynamic_debug("标志:%x, textlem:%d\r\n", info[0], datalen);
+
+			xy_soc_ask_up(T808_MSGID_S_SEND_TEXT, serialnum, 0);
+
+			serverStr = dynamic_malloc(1024);
+			if (!serverStr)
+			{
+				break;
+			}
+
+			memset(serverStr, 0, 1024);
+			memcpy((void *)serverStr, (void *)&info[1], datalen);
+			dynamic_cmd_parse(DYNAMIC_CMD_TYPE_SERVER, NULL, serverStr, datalen);
+
+			dynamic_free(serverStr);
+			serverStr = NULL;
 		}
         break;
 
@@ -1660,8 +1648,22 @@ void xy_soc_data_deal(kal_uint8*data,kal_uint32 len)
 
         case T808_MSGID_S_EXPEND:		/* 透传信息 */
         {
-			
-		}
+			//电路操作
+			if (0x01 == info[0])
+			{
+				//01 fd 04 01 fe - 断开电路
+				//01 fd 00 01 fe - 恢复电路
+				u32 dword = ((u32)info[1] << 24) | ((u32)info[2] << 16) | ((u32)info[3] << 8) | (u32)info[4];
+				if (0xfd0401fe == dword)
+				{
+					dynamic_debug("断开电路");
+				}
+				else if (0xfd0001fe == dword)
+				{
+					dynamic_debug("恢复电路");
+				}
+			}
+        }
 		break;
 
         default:

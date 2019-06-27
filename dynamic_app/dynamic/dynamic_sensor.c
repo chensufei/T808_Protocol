@@ -112,6 +112,19 @@ kal_uint8 dynamic_sensor_vib_in_3min(void)
     return s_vib_state_3min;
 }
 
+
+/*******************************************************************
+** 函数名:     dynamic_sensor_clear_check_cnt
+** 函数描述: 
+** 参数: 
+** 返回:       
+********************************************************************/
+void dynamic_sensor_clear_check_cnt(void)
+{
+	s_check_cnt = 0;
+	memset(s_accelecation_dis, 0, sizeof(s_accelecation_dis) * sizeof(kal_uint32));
+}
+
 /*******************************************************************
 ** 函数名:     dynamic_sensor_value_count
 ** 函数描述: 
@@ -155,7 +168,7 @@ void dynamic_sensor_value_count(void)
 
                 if (xy_info->mode != XY_TRACK_MODE1)
                 {
-                    dynamic_timer_start(enum_timer_track_task_timer,1000,(void*)xy_track_dataup_task,NULL,FALSE);
+                    dynamic_timer_start(enum_timer_track_task_dataup_timer,1000,(void*)xy_track_dataup_task,NULL,FALSE);
                 }
             }
             if (xy_info->anti_thrief && xy_info->vib_alm == 0)

@@ -141,6 +141,10 @@ kal_uint8 xy_soc_get_auth_ok_state(void)
 void xy_soc_set_auth_ok_state(kal_uint8 flag)
 {
     s_xy_soc_info.auth_ok = flag;
+	if (flag)
+	{
+		s_xy_soc_info.close_soc_cnt = 0;
+	}
 }
 
 /*******************************************************************
@@ -176,6 +180,9 @@ void xy_soc_clear_link_info(void)
 	s_xy_soc_info.reg_ok = 0;
 	s_xy_soc_info.auth_ok = 0;
 	s_xy_soc_info.soc_connect_ok = 0;
+
+	dynamic_timer_stop(enum_timer_soc_task_timer);
+	dynamic_timer_start(enum_timer_soc_task_timer,5*1000, (void*)xy_soc_task,NULL,FALSE); 
 }
 
 /*******************************************************************
@@ -282,7 +289,6 @@ kal_uint8 xy_soc_close(void)
 	s_xy_soc_info.ack_fail_cnt = 0;
 	s_xy_soc_info.auth_fail_cnt = 0;
 	s_xy_soc_info.auth_ok = 0;
-	s_xy_soc_info.close_soc_cnt = 0;
 	s_xy_soc_info.reg_ok = 0;
 	s_xy_soc_info.send_cnt = 0;
 	s_xy_soc_info.send_fail_cnt = 0;
@@ -309,8 +315,9 @@ kal_uint8 xy_soc_close_delay(void)
 ** 参数:       
 ** 返回:       
 ********************************************************************/
-kal_int8 xy_soc_send(kal_int8 socket, char *buf, kal_uint32 len)
+kal_int8 xy_soc_send(char *buf, kal_uint32 len)
 {
+    kal_int8 socket = s_soc_cont.soc_id;
     kal_uint32 result = 0;
     kal_uint8 * data_dtr = dynamic_malloc_malloc(XY_SOC_DATA_SIZE+100);
     kal_uint16 dtr_len = 0;
@@ -334,17 +341,6 @@ kal_int8 xy_soc_send(kal_int8 socket, char *buf, kal_uint32 len)
 	}
 	
     return result;
-}
-
-/*******************************************************************
-** 函数名:     xy_soc_data_send
-** 函数描述:
-** 参数:       
-** 返回:       
-********************************************************************/
-kal_int8 xy_soc_data_send(char *buf, kal_uint32 len)
-{
-    return xy_soc_send(s_soc_cont.soc_id,buf,len);
 }
 
 /*******************************************************************
@@ -377,6 +373,28 @@ kal_bool xy_soc_data_pop(void)
     dynamic_free(dynamic_queue_pop(s_soc_queue));
 	dynamic_debug("xy_soc_data_pop queue size:%d",s_soc_queue->size);
     return 1;
+}
+
+/*******************************************************************
+** 函数名:    xy_soc_data_clear
+** 函数描述:  清空数据队列
+** 参数:       
+** 返回:       
+********************************************************************/
+void xy_soc_data_clear(void)
+{
+    XY_SOC_DATA_T * data_str;
+
+	do
+	{
+	    data_str = dynamic_queue_peek(s_soc_queue);
+	    if (!data_str)
+	    {
+			break;
+	    }
+
+		xy_soc_data_pop();
+	} while(1);
 }
 
 /*******************************************************************
@@ -452,12 +470,12 @@ kal_uint8 xy_soc_list_data_send(void)
     data_str = dynamic_queue_peek(s_soc_queue);
     if (data_str != NULL)
     {
-		dynamic_log("send flag:%d, delay_cnt:%d, s_noask_cnt = %d\r\n",
+		dynamic_debug("send flag:%d, delay_cnt:%d, s_noask_cnt = %d\r\n",
 			s_xy_soc_info.pos_send_flag, s_xy_soc_info.delay_cnt, s_noask_cnt);
 	
     	if (!s_xy_soc_info.pos_send_flag)
     	{
-			xy_soc_send(s_soc_cont.soc_id,(char*)data_str->str,data_str->len);
+			xy_soc_send((char*)data_str->str,data_str->len);
 			s_xy_soc_info.pos_send_flag = 1;
 			s_xy_soc_info.delay_cnt = 0;
     	}
@@ -496,7 +514,7 @@ kal_uint8 xy_soc_list_data_send(void)
             return 1;
         }
         
-        ret = xy_soc_send(s_soc_cont.soc_id,(char*)data_str->str,data_str->len);
+        ret = xy_soc_send((char*)data_str->str,data_str->len);
         
         dynamic_debug("xy_soc_list_data_send:%d,%s",data_str->len,data_str->str);
         if (ret != data_str->len)
@@ -554,7 +572,7 @@ void xy_soc_recv_task(void*str)
         dtr_len = xy_deassmble_by_rules(data_dtr,s_tcp_rev_data.databuf,s_tcp_rev_data.datalen,&s_rule);
         temp = data_dtr;
         len = dtr_len;
-        dynamic_debug("-----------------c26_soc_read_task--------------------");
+        dynamic_debug("-----------------xy_soc_recv_task--------------------");
         dynamic_log_hex(temp,len);         
         while(temp != NULL)
 		{
@@ -666,6 +684,7 @@ void xy_soc_cb(DYNAMIC_SOC_CB_E type,kal_int8 socket,void *user_data, void *data
             dynamic_debug("xy_soc_cb DYNAMIC_SOC_CLOSE");
             s_soc_cont.soc_id = -1;
 			s_xy_soc_info.soc_connect_ok = 0;
+			s_xy_soc_info.pos_send_flag = 0;
         }    
         break;
         
@@ -802,8 +821,8 @@ void xy_soc_task(void*ptr)
 	if (p_connection && (DYNAMIC_SOC_CONNECTED == p_connection->status))
 	{
 
-		dynamic_log("connet:%d, reg:%d, auth:%d\r\n", s_xy_soc_info.soc_connect_ok, s_xy_soc_info.reg_ok, s_xy_soc_info.auth_ok);
-		dynamic_log("auth fail cnt:%d, send cnt:%d, ack fail cnt:%d, send fail cnt:%d close soc cnt:%d\r\n",
+		dynamic_debug("connect:%d, reg:%d, auth:%d\r\n", s_xy_soc_info.soc_connect_ok, s_xy_soc_info.reg_ok, s_xy_soc_info.auth_ok);
+		dynamic_debug("auth fail cnt:%d, send cnt:%d, ack fail cnt:%d, send fail cnt:%d close soc cnt:%d\r\n",
 			s_xy_soc_info.auth_fail_cnt, s_xy_soc_info.send_cnt, s_xy_soc_info.ack_fail_cnt, s_xy_soc_info.send_fail_cnt,
 			s_xy_soc_info.close_soc_cnt);
 	
@@ -950,8 +969,6 @@ void xy_soc_task(void*ptr)
 	/* 开始连接平台 */
 	if (!p_connection)
 	{
-		s_xy_soc_info.close_soc_cnt = 0;
-
 		if (1 == app_cntx->gsm_state)//搜索到网络了
         {
 			kal_uint8 server[XY_URL_LEN + 1] = {0};
@@ -966,13 +983,13 @@ void xy_soc_task(void*ptr)
             }
             else
             {
-                dynamic_log("err server:%s,port:%d\r\n",xy_info->server,xy_info->port);
+                dynamic_debug("err server:%s,port:%d\r\n",xy_info->server,xy_info->port);
                 memcpy(server,XY_DEFAULT_SERVER,strlen((char*)XY_DEFAULT_SERVER));
                 port = XY_DEFAULT_PORT;
             }
 
 			/* 用TCP的方式去连接平台 */
-			dynamic_log("connect server: %s, %d\r\n", server, port);
+			dynamic_debug("connect server: %s, %d\r\n", server, port);
 			s_soc_cont.soc_id = dynamic_soc_connect(0, (kal_int8*)server, port,(void*)xy_soc_cb, NULL);
 
 			tasktime = 15*1000;
@@ -983,7 +1000,7 @@ void xy_soc_task(void*ptr)
 		if (++gsm_net_fail_cnt >= 20)
 		{
 			gsm_net_fail_cnt = 0;
-			dynamic_log("soc err err_gsm_state,start reset\r\n");
+			dynamic_debug("soc err err_gsm_state,start reset\r\n");
 	        if (dynamic_sim_get_valid() == 0)
 	        {
 	            if (xy_info->reset_cnt < 3)
@@ -991,7 +1008,7 @@ void xy_soc_task(void*ptr)
 	                xy_info->reset_cnt++;
 	                dynamic_start_reset(RESET_TYPE_NO_SIM);
 	            }
-	            dynamic_log("xy_info->reset_cnt:%d\r\n", xy_info->reset_cnt);
+	            dynamic_debug("xy_info->reset_cnt:%d\r\n", xy_info->reset_cnt);
 	        }
 	        else
 	        {
@@ -1008,7 +1025,8 @@ cycle:
 	/* 在连接平台到发送鉴权过程中，关闭soc的次数大于10次，就重启设备 */
 	if (s_xy_soc_info.close_soc_cnt >= 10)
 	{
-		dynamic_log("over 10 times, close soc ,start reset......\r\n");
+		s_xy_soc_info.close_soc_cnt = 0;
+		dynamic_debug("over 10 times, close soc ,start reset......\r\n");
         dynamic_start_reset(RESET_TYPE_SOC_ERR);
 	}
 	
@@ -1032,7 +1050,7 @@ cycle:
             }
             else
             {
-                dynamic_log("err server:%s,port:%d\r\n",xy_info->server,xy_info->port);
+                dynamic_debug("err server:%s,port:%d\r\n",xy_info->server,xy_info->port);
                 memcpy(server,XY_DEFAULT_SERVER,strlen((char*)XY_DEFAULT_SERVER));
                 port = XY_DEFAULT_PORT;
             }
@@ -1043,7 +1061,7 @@ cycle:
         else if (++err_gsm_state >= 20)
         {
             err_gsm_state = 0;
-            dynamic_log("soc err err_gsm_state,start reset\r\n");
+            dynamic_debug("soc err err_gsm_state,start reset\r\n");
             if (dynamic_sim_get_valid() == 0)
             {
                 if (xy_info->reset_cnt < 3)
@@ -1051,7 +1069,7 @@ cycle:
                     xy_info->reset_cnt++;
                     dynamic_start_reset(RESET_TYPE_SOC_ERR);
                 }
-                dynamic_log("xy_info->reset_cnt:%d\r\n",xy_info->reset_cnt);
+                dynamic_debug("xy_info->reset_cnt:%d\r\n",xy_info->reset_cnt);
             }
             else
             {
@@ -1142,7 +1160,7 @@ cycle:
     if (err_reset >= 8)
     {
         err_reset = 0;
-        dynamic_log("soc err ,start reset\r\n");
+        dynamic_debug("soc err ,start reset\r\n");
         dynamic_start_reset(RESET_TYPE_SOC_ERR);
     }
 
@@ -1190,50 +1208,71 @@ void xy_soc_err_check(void)
 ********************************************************************/
 void xy_soc_data_init(void)
 {
-    char * data = NULL;
-    kal_int32 datalen,i;
+    kal_uint8 * filedata = NULL;
 
-    data = dynamic_malloc_malloc(MAX_SOC_DATA_SIZE+1);
+    filedata = dynamic_malloc_malloc(MAX_SOC_DATA_SIZE+1);
 
-    if (data != NULL)
+    if (filedata != NULL)
     {
-        char * str = NULL;
-        char * dtr = NULL;
-        kal_uint32 curlen;
+        kal_uint8 * temp = NULL;
+        kal_uint8 * data_str = NULL;
+        kal_uint8 *str_head = 0;
+        kal_uint8 *str_end = 0;
+        kal_uint32 len,cur_len,filelen;
+        kal_uint32 len_count = 0;
         
-        datalen = dynamic_file_read(XY_SOC_DATA_FILE_NAME,data,MAX_SOC_DATA_SIZE);
-        dynamic_debug("xy_soc_data_init datalen:%d",datalen);
-        for (i=0;i<datalen;i++)
+        filelen = dynamic_file_read(XY_SOC_DATA_FILE_NAME,filedata,MAX_SOC_DATA_SIZE);
+        dynamic_debug("xy_soc_data_init filelen:%d",filelen);
+
+        data_str = dynamic_malloc_malloc(MAX_SOC_DATA_SIZE+1);
+
+        if (data_str != NULL)
         {
-            if (data[i] == XY_SOC_PROTOCOL_HEAD)
-            {
-                str = &data[i];
-            }
-            else if (data[i] == XY_SOC_PROTOCOL_END)
-            {
-                if (str == NULL)
-                {
-                    dynamic_debug("err heard str");
-                }
-                else
-                {
-                    dtr = &data[i];
-                    curlen = dtr-str+1;
-                    dynamic_debug("curlen:%d",curlen);
-                    if (curlen < XY_SOC_DATA_SIZE)
+            len = xy_deassmble_by_rules(data_str,filedata,filelen,&s_rule);
+            temp = data_str;
+            dynamic_debug("-----------------xy_soc_data_init--------------------");
+            dynamic_log_hex(temp,len);         
+            while(temp != NULL)
+    		{
+                str_head = dynamic_find_byte_pos(temp,XY_SOC_PROTOCOL_HEAD,(len-len_count));
+                
+                if (str_head != NULL)
+                {                
+                    str_end = dynamic_find_byte_pos((str_head+1),XY_SOC_PROTOCOL_END,(len-len_count-1));
+
+                    if (str_end != NULL)
                     {
-                        xy_soc_data_in((kal_uint8*)str,curlen);
+                        cur_len = (str_end - str_head + 1);
+                        if (cur_len > (len-len_count))
+                        {
+                            dynamic_debug("-----------------xy_soc_data_init err len ,break:%d,%d--------------------",cur_len,(len-len_count));
+                            break;
+                        }
                     }
                     else
                     {
-                        dynamic_debug("err curlen:%d,%d",curlen,XY_SOC_DATA_SIZE);
+                        dynamic_debug("str_end == NULL");
+                        break;
                     }
-                    dtr = NULL;
-                    str = NULL;
                 }
-            }
+                else
+                {
+                    dynamic_debug("-----------------str_head == NULL--------------------");
+                    break;
+                }
+
+                len_count += cur_len;
+                dynamic_debug("len:%d,%d,%d",len,len_count,cur_len);
+                temp = str_head+cur_len;
+                xy_soc_data_in((str_head+1),(cur_len-2));
+                if (len_count >= len)
+                {
+                    break;
+                }
+    		}
         }
-        dynamic_free(data);
+        dynamic_free(filedata);
+        dynamic_free(data_str);
         dynamic_file_dele(XY_SOC_DATA_FILE_NAME);
     }
 }
@@ -1271,35 +1310,47 @@ void xy_soc_data_reset(void)
 ********************************************************************/
 void xy_soc_data_save(void)
 {
-    char * data = NULL;
+    kal_uint8 * file_str = NULL;
+    kal_uint8 * data_dtr = NULL;
     kal_int32 datalen = 0;
     kal_uint16 i;
+    kal_uint16 dtr_len = 0;
 
-    data = dynamic_malloc_malloc(MAX_SOC_DATA_SIZE+1);
-
-    if (data != NULL)
+    
+    file_str = dynamic_malloc_malloc(MAX_SOC_DATA_SIZE+1);
+    data_dtr = dynamic_malloc_malloc(XY_SOC_DATA_SIZE+100);
+    
+    if (file_str != NULL && data_dtr != NULL)
     {
         for (i=0;i<XY_MAX_SOC_DATA_NUM;i++)
         {
             XY_SOC_DATA_T *data_str = NULL;
             
             data_str = dynamic_queue_peek(s_soc_queue);
+          
             if (data_str == NULL)
             {
                 break;
             }
             else
             {
-                memcpy(&data[datalen],data_str->str,data_str->len);
-                datalen += data_str->len;
+                dtr_len = xy_assemble_by_rules(data_dtr,data_str->str,data_str->len,&s_rule);
+                if ((datalen + dtr_len) > MAX_SOC_DATA_SIZE)
+                {
+                    break;
+                }
+                
+                memcpy(&file_str[datalen],data_dtr,dtr_len);
+                datalen += dtr_len;                    
                 xy_soc_data_pop();
             }
         }
         if (datalen > 0)
         {
-            dynamic_file_write(XY_SOC_DATA_FILE_NAME,data,datalen);
+            dynamic_file_write(XY_SOC_DATA_FILE_NAME,file_str,datalen);
         }
-        dynamic_free(data);
+        dynamic_free(data_dtr);        
+        dynamic_free(file_str);
     }
 }
 
@@ -1325,9 +1376,9 @@ void xy_soc_init(void)
         xy_soc_data_init();//读文件，把保存到文件的盲区数据读到队列中
     }
 
-    dynamic_timer_start(enum_timer_soc_task_timer,15*1000,(void*)xy_soc_task,NULL,FALSE); 
+    dynamic_timer_start(enum_timer_soc_task_timer, 5*1000,(void*)xy_soc_task,NULL,FALSE); 
     //dynamic_timer_start(enum_timer_soc_err_check_timer,10*1000,(void*)xy_soc_err_check,NULL,FALSE); 
-    dynamic_timer_start(enum_timer_track_heart_timer,30*1000,(void*)xy_soc_heart_task,NULL,FALSE);
+    dynamic_timer_start(enum_timer_track_heart_timer, 10*1000,(void*)xy_soc_heart_task,NULL,FALSE);
 }
 
 #endif

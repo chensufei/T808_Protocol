@@ -205,8 +205,6 @@ DYNAMIC_DEFINE_API(kal_uint8,dynamic_gps_refloc_aid,double lat,double lng,double
 DYNAMIC_DEFINE_API(void,dynamic_gps_epo_req,void);
 DYNAMIC_DEFINE_API(kal_bool,dynamic_epo_is_valid,void);
 DYNAMIC_DEFINE_API(kal_bool,dynamic_gps_epo_aiding,void);
-DYNAMIC_DEFINE_API(dynamic_gps_info_t *,dynamic_gps_get_gps_info,void);
-DYNAMIC_DEFINE_API(nmea_data_t *,dynamic_gps_get_info_src,void);
 
 
 #endif

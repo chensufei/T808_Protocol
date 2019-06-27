@@ -24,15 +24,15 @@
 ********************************************************************/
 void xy_track_dataup_task(void*ptr)
 {
-    XY_INFO_T * xy_info = xy_get_info();
+	XY_INFO_T * xy_info = xy_get_info();
 	T808_PARA_T *t808_para = &(xy_info->t808_para);
 	dynamic_gps_info_t *gps_info = dynamic_gps_get_info();
-	kal_int32 task_time = 5;
-	kal_uint32 distance = 0;
 	static double last_pos_lat = 0;
     static double last_pos_lng = 0;
-
+    kal_int32 task_time = 5;
+	kal_uint32 distance = 0;
 #if 0
+
     if (xy_info->mode == XY_TRACK_MODE3 && xy_info->sport_state == 0)
     {
         applib_time_struct systime;
@@ -88,10 +88,10 @@ void xy_track_dataup_task(void*ptr)
 	dynamic_timer_start(enum_timer_track_task_dataup_timer,task_time*1000,(void*)xy_track_dataup_task,NULL,FALSE);	
 #else
 	
-	dynamic_log("time_sec:%d, cycle:%d\r\n",
+	dynamic_debug("time_sec:%d, cycle:%d\r\n",
 				t808_para->tracking_time_sec, t808_para->tracking_cylce);
 	
-	dynamic_log("type:%d, way:%d, mode:%d, freq:%d\r\n",
+	dynamic_debug("type:%d, way:%d, mode:%d, freq:%d\r\n",
 					t808_para->report_type, t808_para->report_way, xy_info->mode, xy_info->freq);
 	/* 如果有下发临时跟踪设备 */
 	if ((t808_para->tracking_time_sec > 0) && (t808_para->tracking_cylce > 0))
@@ -119,10 +119,18 @@ void xy_track_dataup_task(void*ptr)
 	{
 		//如果是紧急状态下
 
-		if (0 == t808_para->report_way)
+		if ((0 == t808_para->report_way) || (xy_soc_get_auth_ok_state() && (1 == t808_para->report_way)))
 		{
-			//直接根据acc去判断
-			if (XY_TRACK_MODE1 == xy_info->mode)
+			if (dynamic_gps_is_inflection_point())
+			{
+				xy_soc_location_up();
+
+				last_pos_lat = gps_info->lat;
+				last_pos_lng = gps_info->lng;
+				task_time = 5;
+			}
+			else if ((XY_TRACK_MODE1 == xy_info->mode) ||
+				((XY_TRACK_MODE2 == xy_info->mode) && (1 == xy_info->sport_state)))//直接根据acc去判断
 			{
 				xy_soc_location_up();
 
@@ -131,25 +139,6 @@ void xy_track_dataup_task(void*ptr)
 
 				dynamic_log("cycle:%d\r\n", xy_info->freq);
 				task_time = xy_info->freq;
-			}
-			else
-			{
-				task_time = 5;
-			}
-		}
-		else if (1 == t808_para->report_way)
-		{
-			//先判断登录状态，再根据ACC去判断
-			if (xy_soc_get_auth_ok_state())
-			{
-				if (XY_TRACK_MODE1 == xy_info->mode)
-				{
-					xy_soc_location_up();
-
-					last_pos_lat = gps_info->lat;
-					last_pos_lng = gps_info->lng;
-					task_time = xy_info->freq;
-				}
 			}
 		}
 
@@ -222,6 +211,7 @@ void xy_track_wakeup(void)
     systime_sec = dynamic_timer_time2sec(&systime);
     xy_info->sport_sectime = systime_sec;      
     xy_info->sport_state = 1;
+	
 }
 
 /*******************************************************************
@@ -239,7 +229,12 @@ void xy_track_mode_check(void)
 
     dynamic_time_get_systime(&systime);
     systime_sec = dynamic_timer_time2sec(&systime); 
-        
+
+	dynamic_debug("acc_state:%d, mode:%d, slp_sw:%d, acc off flag:%d, sport_state:%d, %d, %d\r\n",
+			xy_info->acc_state, xy_info->mode, xy_info->slp_sw, xy_info->acc_off_flg,
+			xy_info->sport_state, xy_info->sport_sectime, (systime_sec - xy_info->sport_sectime));
+
+
     if (xy_info->sport_state == 1)
     {
         if (systime_sec < xy_info->sport_sectime)
@@ -250,23 +245,31 @@ void xy_track_mode_check(void)
         {
             if ((systime_sec - xy_info->sport_sectime) >= xy_info->slp_d_t)
             {
-                xy_info->sport_sectime = systime_sec;
-                xy_info->sport_state = 0;
-                dynamic_debug("切换为静止状态");
-                xy_info_save();
+                if ((systime_sec - xy_info->sport_sectime) > 1000)
+                {
+                    dynamic_debug("开机同步时间导致唤醒时间异常，刚上电串口下载一半可能休眠");
+                    xy_info->sport_sectime = systime_sec;
+                }
+                else
+                {
+                    xy_info->sport_sectime = systime_sec;
+                    xy_info->sport_state = 0;
+                    dynamic_debug("切换为静止状态");
+                    xy_info_save();
+                }
             }
         }
     }
 
     if (xy_info->vib_alm == 1)
     {
-        if ((systime_sec - xy_info->sport_sectime) >= 300) // 震动报警180s一次
+        if ((xy_info->sport_sectime > 0) && ((systime_sec - xy_info->sport_sectime) >= 300)) // 震动报警180s一次
         {
             xy_info->vib_alm = 0;
             xy_info_save();
         }
     }
-    
+	
     if (xy_info->acc_state == XY_ACC_ON)
     {
         if (xy_info->mode != XY_TRACK_MODE1)
@@ -345,6 +348,12 @@ void xy_track_set_mode(kal_uint8 mode)
 
     if (xy_info->mode != mode)
     {
+		if (XY_TRACK_MODE3 == mode)
+		{
+			/* 一旦休眠，需要重新设置gsensor采集的次数 */
+			dynamic_sensor_clear_check_cnt();
+		}
+	
         dynamic_debug("切换工作模式:%d,%d",pre_mode,mode);
         xy_info->mode = mode;
         xy_info_save();
@@ -458,7 +467,7 @@ void xy_track_mode_init(void)
 void xy_track_init(void)
 {  
     xy_track_mode_init();
-	dynamic_timer_start(enum_timer_track_task_timer,1000,(void*)xy_track_mode_check,NULL,FALSE);
+	dynamic_timer_start(enum_timer_track_task_timer,5 * 1000,(void*)xy_track_mode_check,NULL,FALSE);
 	dynamic_timer_start(enum_timer_track_task_dataup_timer,20*1000,(void*)xy_track_dataup_task,NULL,FALSE);
 }
 

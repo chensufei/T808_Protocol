@@ -1,2 +1,7 @@
----- 切换工作模式 Matches (1 in 1 files) ----
-Xy_track.c (track):        dynamic_debug("切换工作模式:%d,%d",pre_mode,mode);
+---- dynamic_gps_get_write_epo_data_flag Matches (6 in 4 files) ----
+1.txt (out):    dynamic_gps_get_write_epo_data_flag      0x0038ada8   ARM Code      12  dynamic_gps.o(.text)
+Dynamic_gps.c (dynamic):** 函数名:     dynamic_gps_get_write_epo_data_flag
+Dynamic_gps.c (dynamic):kal_uint8 dynamic_gps_get_write_epo_data_flag(void)
+Dynamic_gps.h (dynamic):** 函数名:     dynamic_gps_get_write_epo_data_flag
+Dynamic_gps.h (dynamic):kal_uint8 dynamic_gps_get_write_epo_data_flag(void);
+Xy_soc.c (track):	if (dynamic_gps_get_write_epo_data_flag())

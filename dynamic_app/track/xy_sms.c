@@ -269,7 +269,7 @@ int xy_cmd_gpssnr(char type,char*num,char *cmd,dynamic_custom_cmdLine *str)
     {
         return ret;
     }
-    memset(askdata,0,DYNAMIC_CMD_ASK_LEN);
+    //memset(askdata,0,DYNAMIC_CMD_ASK_LEN);
     
     result = dynamic_cmd_find_cmd_mode(str); 	
     switch (result)
@@ -277,18 +277,10 @@ int xy_cmd_gpssnr(char type,char*num,char *cmd,dynamic_custom_cmdLine *str)
         case CUSTOM_ACTIVE_MODE:
         {
             nmea_data_t *nmea_str = dynamic_gps_get_nmea();
-            applib_time_struct systime;
-            kal_uint32 systime_sec = 0;
-            XY_INFO_T * xy_info = xy_get_info();
-            dynamic_gps_info_t *gps_info = dynamic_gps_get_info();
+            //dynamic_gps_info_t *gps_info = dynamic_gps_get_info();
 
-            dynamic_time_get_systime(&systime);
-            systime_sec = dynamic_timer_time2sec(&systime);
-            xy_info->accoff_sectime = systime_sec;
-            xy_info->acc_off_flg = 1;
-            xy_info->acc_state = XY_ACC_OFF;
 
-            if (gps_info->valid)
+            //if (gps_info->valid)
             {
                 asklen = sprintf(askdata,"%s:%d-%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d",
                     cmd,
@@ -313,12 +305,10 @@ int xy_cmd_gpssnr(char type,char*num,char *cmd,dynamic_custom_cmdLine *str)
                     nmea_str->tag_gsv.tag_rsv[17].tag_snr,
                     nmea_str->tag_gsv.tag_rsv[18].tag_snr,
                     nmea_str->tag_gsv.tag_rsv[19].tag_snr);
-                    
-    			dynamic_cmd_ask(type,num,askdata,asklen);
-    			ret = DYNAMIC_AT_RET;           
+                      
             }
-
-            ret = DYNAMIC_AT_OK;
+            dynamic_cmd_ask(type,num,askdata,asklen);
+    		ret = DYNAMIC_AT_RET;         
         }
         break;
 

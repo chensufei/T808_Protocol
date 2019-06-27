@@ -30,8 +30,8 @@
 #define XY_MAX_SMS_CMD_LEN 10
 #define XY_PASSWORD_LEN 6
 
-#define XY_DEFAULT_PORT 8800 
-#define XY_DEFAULT_SERVER "121.201.110.106"
+#define XY_DEFAULT_PORT 7018//8800 
+#define XY_DEFAULT_SERVER "58.61.154.231"//"121.201.110.106"
 
 
 #define XY_DEFAULT_CRL_PSW "123456"
@@ -130,10 +130,13 @@ typedef struct _t808_para_
 	kal_uint8 report_type;							/* 位置汇报策略,位置信息上报方式，0：定时汇报；1：定距汇报；2：定时和定距汇报 */
 	kal_uint8 report_way;							/* 位置汇报方案, 0：根据 ACC 状态； 1：根据登录状态和 ACC 状态，先判断登录状态，若登录再根据 ACC 状态 */
 
+	kal_uint32 sleep_freq;							/* 休眠时上报的时间间隔，默认是3600s*/
 	kal_uint32 sos_freq;							/* 紧急报警时间，默认是5s */
 	kal_uint32 def_distance;						/* 缺省距离汇报间隔,默认是300m */
 	kal_uint32 sos_distance;						/* 紧急汇报间隔,默认是50m */
 	kal_uint16 degree;								/* 拐点补传角度, <180° */
+	kal_uint16 degree_switch;						/* 拐点补传开关, 0/1 开启/关闭 默认开启*/
+	kal_uint16 degree_freq;                         /* 拐点上报频率,默认5s*/
 	kal_uint16 fencing_radius;						/* 电子围栏半径（非法位移阈值），单位为米，默认300m */
 	char txt_number[MAX_PHONE_NUM_LEN + 1];			/* 文本号码，接收短信/报警 */
 
@@ -210,6 +213,8 @@ typedef struct _xy_info_
     XY_ALM_PARA_T acc_p; // 非法ACC报警参数
     kal_uint8 acc_alm; // ACC报警
     kal_uint8 acc_state; // ACC状态
+    kal_uint8 acc_check_mode; // ACC检测方式： 0：ACC线检测点火/熄火 默认为0; 3:G-sensor检测方式
+    kal_uint8 acc_check_switch; // ACC检测开关,0:无acc判断，上传acc状态为OFF。1：按acc_check_mode值方式（默认）
     
     XY_ALM_PARA_T move_p; // 位移报警参数
     kal_uint8 move_alm; // 位移报警
@@ -237,7 +242,8 @@ typedef struct _xy_info_
     kal_uint32 sport_sectime; // 最后检测到运动的时间秒
     kal_uint32 accoff_sectime; // 熄火的时间
     kal_uint32 mileage; // 里程
-    
+    float tzone; // 时区
+    kal_uint8 lockmode;//设防模式，0 自动设防/撤防，1 手动撤防撤防;默认X=1
     kal_uint32 temp[10];
     
     kal_uint32 checksum; // 累加和
